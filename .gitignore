@@ -22,6 +22,11 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .env.production.local
 .env.local
 
+# secrets / credentials (never commit — see PLAN.md §3, §6.9)
+*.key.json
+service-account.key.json
+.clasp.json
+
 # caches
 .eslintcache
 .cache
@@ -35,3 +40,6 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # package manager
 mise.toml
+
+# ai
+.claude
