@@ -80,13 +80,34 @@ Which phases cover which requirements. Populated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (to be filled by roadmap) | | |
+| SETUP-01 | Phase 1 | Pending |
+| SETUP-02 | Phase 1 | Pending |
+| CONFIG-01 | Phase 1 | Pending |
+| SEC-03 | Phase 1 | Pending |
+| LAYOUT-01 | Phase 2 | Pending |
+| LAYOUT-02 | Phase 2 | Pending |
+| SEC-01 | Phase 3 | Pending |
+| SEC-02 | Phase 3 | Pending |
+| DATA-01 | Phase 3 | Pending |
+| DATA-02 | Phase 3 | Pending |
+| DATA-03 | Phase 3 | Pending |
+| DATA-04 | Phase 3 | Pending |
+| REFRESH-01 | Phase 4 | Pending |
+| REFRESH-02 | Phase 4 | Pending |
+| REFRESH-03 | Phase 4 | Pending |
+| REFRESH-04 | Phase 4 | Pending |
+| PNL-01 | Phase 5 | Pending |
+| PNL-02 | Phase 5 | Pending |
+| PNL-03 | Phase 5 | Pending |
+| PNL-04 | Phase 5 | Pending |
+| ALLOC-01 | Phase 5 | Pending |
+| ALLOC-02 | Phase 5 | Pending |
 
 **Coverage:**
 - v1 requirements: 22 total
-- Mapped to phases: (pending roadmap)
-- Unmapped: (pending roadmap)
+- Mapped to phases: 22
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-06-13*
-*Last updated: 2026-06-13 after initial definition*
+*Last updated: 2026-06-13 after roadmap creation*
