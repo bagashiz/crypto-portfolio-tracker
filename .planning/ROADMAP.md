@@ -14,7 +14,7 @@ Build a two-runtime Google Sheets portfolio tracker from a fresh scaffold. Work 
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation** - Repo skeleton, gitignore, Apps Script toolchain verified, asset config registry in place (completed 2026-06-14)
-- [ ] **Phase 2: Layout Builder** - Service-account layout builder creates and idempotently updates Dashboard + DCA Log tabs
+- [x] **Phase 2: Layout Builder** - Service-account layout builder creates and idempotently updates Dashboard + DCA Log tabs (completed 2026-06-14)
 - [ ] **Phase 3: Data Layer** - Apps Script provider modules (Hyperliquid, Jupiter, Solana RPC) with secrets wired via Secret Manager and PropertiesService
 - [ ] **Phase 4: Refresh & Caching** - Time-driven trigger runs batched writes with blob cache and graceful degradation per provider
 - [ ] **Phase 5: PnL & Allocation** - DCA log, cost-basis summary block, unrealized P&L display with color coding, and allocation health zone
@@ -59,7 +59,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Wave 1**
 
 - [x] 02-01-PLAN.md — Foundation: .env-sourced config, service-account auth client, and pure Dashboard + DCA Log skeleton request-builders with provable data-region safety
-- [ ] 02-02-PLAN.md — CLI orchestrator: `--build` (tab-existence guard, never spreadsheets.create) + `--update` (structural-only) dispatch, package.json node --env-file scripts, README
+- [x] 02-02-PLAN.md — CLI orchestrator: `--build` (tab-existence guard, never spreadsheets.create) + `--update` (structural-only) dispatch, package.json node --env-file scripts, README
 
 > 02-02 depends on 02-01 (Wave 2). Listed here under the phase; execution waves are read from each plan's frontmatter.
 
@@ -115,7 +115,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 2/2 | Complete    | 2026-06-14 |
-| 2. Layout Builder | 1/2 | In Progress|  |
+| 2. Layout Builder | 2/2 | Complete   | 2026-06-14 |
 | 3. Data Layer | 0/TBD | Not started | - |
 | 4. Refresh & Caching | 0/TBD | Not started | - |
 | 5. PnL & Allocation | 0/TBD | Not started | - |
