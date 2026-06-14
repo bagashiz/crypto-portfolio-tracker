@@ -4,9 +4,14 @@
  * type-check under `strict` while documenting the full set of entry points that
  * later phases will surface.
  */
+import type { Asset } from "./Config";
+
 declare global {
   // eslint-disable-next-line no-var
   var hello: () => string;
+  // The inlined shared asset registry (D-05), exposed for provider/refresh code.
+  // eslint-disable-next-line no-var
+  var ASSETS: readonly Asset[];
   // Reserved for later phases (assigned in entry.ts as they land):
   // var refreshAll: () => void;
   // var installTrigger: () => void;

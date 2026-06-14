@@ -11,10 +11,15 @@
  * bundle even though nothing calls it yet this phase.
  */
 import { hello } from "./Hello";
-import "./Config";
+import { ASSETS } from "./Config";
 
 // Phase 1: only hello() is live and must be editor-callable (SETUP-02, D-03).
 globalThis.hello = hello;
+
+// Expose the inlined shared asset registry as a global so the bundler retains it
+// (D-05) — proves assets.json is inlined into Code.js with no runtime file
+// dependency, and makes the registry available to future provider/refresh code.
+globalThis.ASSETS = ASSETS;
 
 // TODO(Phase 3 — providers/refresh): expose the real trigger entry point.
 // globalThis.refreshAll = refreshAll;
