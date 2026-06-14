@@ -29,7 +29,9 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. Running `clasp push` deploys a compiled `dist/` and a trivial top-level function (e.g., `hello`) is callable from the Apps Script editor without errors
   3. `.gitignore` covers `*.key.json`, `.clasp.json`, and `apps-script/dist/` — confirmed by `git status` showing those paths as ignored before any key file is written
   4. Adding or removing an asset requires a one-line change in a single config file in each runtime (not scattered across multiple files)
-**Plans**: TBD
+**Plans**: 2 plans
+- [ ] 01-PLAN.md — Repo foundation: verify gitignore, root Bun workspace, shared assets.json, layout-builder package
+- [ ] 02-PLAN.md — Apps Script toolchain: TS source + entry.ts globals, bun build IIFE bundle, clasp deploy + hello() smoke test
 
 ### Phase 2: Layout Builder
 **Goal**: A user can build and idempotently update the complete spreadsheet structure from the command line without touching DCA Log data rows
@@ -83,7 +85,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/TBD | Not started | - |
+| 1. Foundation | 0/2 | Not started | - |
 | 2. Layout Builder | 0/TBD | Not started | - |
 | 3. Data Layer | 0/TBD | Not started | - |
 | 4. Refresh & Caching | 0/TBD | Not started | - |
