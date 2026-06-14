@@ -3,7 +3,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "build": "bun build src/entry.ts --format=iife --outfile=dist/Code.js",
+    "build": "bun build src/entry.ts --format=iife --outfile=dist/Code.js && bun scripts/appendGlobals.ts",
     "deploy": "bun run build && cp appsscript.json dist/appsscript.json && clasp push"
   },
   "devDependencies": {
