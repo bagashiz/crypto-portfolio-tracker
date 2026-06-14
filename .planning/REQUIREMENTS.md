@@ -9,12 +9,12 @@ Requirements for the initial release. Each maps to a roadmap phase.
 
 ### Project Setup
 
-- [ ] **SETUP-01**: Two-runtime repo skeleton exists with separate dependency sets — `layout-builder/` (Node + `googleapis`) and `apps-script/` (TypeScript) — plus `.gitignore` and per-runtime READMEs
+- [x] **SETUP-01**: Two-runtime repo skeleton exists with separate dependency sets — `layout-builder/` (Node + `googleapis`) and `apps-script/` (TypeScript) — plus `.gitignore` and per-runtime READMEs
 - [ ] **SETUP-02**: Apps Script TS toolchain compiles `src/` to flat `dist/` with trigger entry points as top-level globals; `clasp push` of `dist/` works and a deployed function is globally callable; a `deploy` script wires build + push
 
 ### Configuration
 
-- [ ] **CONFIG-01**: Asset registry (Solana mint addresses, Hyperliquid tickers, target allocation, risk scores, APY) lives in one config source per runtime so adding/removing an asset is a one-line change
+- [x] **CONFIG-01**: Asset registry (Solana mint addresses, Hyperliquid tickers, target allocation, risk scores, APY) lives in one config source per runtime so adding/removing an asset is a one-line change
 
 ### Layout Builder
 
@@ -51,7 +51,7 @@ Requirements for the initial release. Each maps to a roadmap phase.
 
 - [ ] **SEC-01**: The Jupiter API key is stored in GCP Secret Manager and read via a `Secrets` module using `ScriptApp.getOAuthToken()`
 - [ ] **SEC-02**: Wallet addresses and runtime config are stored in `PropertiesService`, not hardcoded
-- [ ] **SEC-03**: The service-account key is local-only and gitignored; `.gitignore` covers `*.key.json`, `.clasp.json`, and `apps-script/dist`
+- [x] **SEC-03**: The service-account key is local-only and gitignored; `.gitignore` covers `*.key.json`, `.clasp.json`, and `apps-script/dist`
 
 ## v2 Requirements
 
@@ -80,10 +80,10 @@ Which phases cover which requirements. Populated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SETUP-01 | Phase 1 | Pending |
+| SETUP-01 | Phase 1 | Complete |
 | SETUP-02 | Phase 1 | Pending |
-| CONFIG-01 | Phase 1 | Pending |
-| SEC-03 | Phase 1 | Pending |
+| CONFIG-01 | Phase 1 | Complete |
+| SEC-03 | Phase 1 | Complete |
 | LAYOUT-01 | Phase 2 | Pending |
 | LAYOUT-02 | Phase 2 | Pending |
 | SEC-01 | Phase 3 | Pending |
@@ -104,6 +104,7 @@ Which phases cover which requirements. Populated during roadmap creation.
 | ALLOC-02 | Phase 5 | Pending |
 
 **Coverage:**
+
 - v1 requirements: 22 total
 - Mapped to phases: 22
 - Unmapped: 0

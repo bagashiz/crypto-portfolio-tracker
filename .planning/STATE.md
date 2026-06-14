@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 1 context gathered
-last_updated: "2026-06-14T05:23:09.129Z"
-last_activity: 2026-06-13 — Roadmap created; all 22 v1 requirements mapped across 5 phases
+last_updated: "2026-06-14T05:32:14.083Z"
+last_activity: 2026-06-14 -- Phase 01 execution started
 progress:
   total_phases: 5
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 2
+  completed_plans: 1
   percent: 0
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-13)
 
 **Core value:** See accurate unrealized PnL — live portfolio value measured against DCA-weighted cost basis — for the whole portfolio at a glance, refreshed automatically.
-**Current focus:** Phase 1 — Foundation
+**Current focus:** Phase 01 — foundation
 
 ## Current Position
 
-Phase: 1 of 5 (Foundation)
-Plan: 0 of TBD in current phase
+Phase: 01 (foundation) — EXECUTING
+Plan: 2 of 2
 Status: Ready to execute
-Last activity: 2026-06-13 — Roadmap created; all 22 v1 requirements mapped across 5 phases
+Last activity: 2026-06-14 -- Phase 01 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -52,6 +52,7 @@ Progress: [░░░░░░░░░░] 0%
 - Trend: -
 
 *Updated after each plan completion*
+| Phase 01 P01 | 5min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -64,6 +65,8 @@ Recent decisions affecting current work:
 - Pre-roadmap: Raw HTTP everywhere; no SDKs in either runtime
 - Pre-roadmap: Scheduled trigger writes data (not custom sheet functions)
 - Pre-roadmap: FETCH_BALANCES flag gates Solana RPC to avoid two failure modes at once
+- [Phase ?]: Single shared assets.json at repo root is the one source of truth (D-04), not two per-runtime configs
+- [Phase ?]: assets.json uses placeholder mint/XAUt-ticker strings; exact values are a Phase 3 blocker (D-07)
 
 ### Pending Todos
 
@@ -83,6 +86,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-06-14T05:11:27.616Z
+Last session: 2026-06-14T05:31:51.778Z
 Stopped at: Phase 1 context gathered
 Resume file: .planning/phases/01-foundation/01-CONTEXT.md
