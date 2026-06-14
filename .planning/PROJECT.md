@@ -45,7 +45,7 @@ See accurate unrealized PnL — live portfolio value measured against DCA-weight
 
 ## Context
 
-- **Greenfield in practice.** Repo is a fresh `bun init` scaffold (`index.ts` hello-world only). No `layout-builder/` or `apps-script/` directories exist yet. Substance came from a pre-GSD `PLAN.md` build spec (now absorbed into these planning docs) and a prior-session memory.
+- **Foundation built (Phase 1 complete, 2026-06-14).** The two-runtime skeleton now exists: root Bun workspace, shared `assets.json` registry, `layout-builder/` package (isolated `googleapis`), and `apps-script/` TS toolchain bundling to a flat `dist/Code.js` via `bun build --format=iife` + `clasp push`. A deployed `hello()` was confirmed editor-callable. Substance originally came from a pre-GSD `PLAN.md` build spec (now absorbed into these planning docs) and a prior-session memory.
 - **This merges two prior visions:** the `PLAN.md` two-runtime architecture (service-account layout builder + scheduled Apps Script data layer) combined with the PnL-dashboard features from the earlier memory (DCA cost basis, unrealized PnL, color coding, allocation health).
 - **Assets tracked:**
   - Hyperliquid wallet: BTC, HYPE, XAUt
@@ -71,7 +71,8 @@ See accurate unrealized PnL — live portfolio value measured against DCA-weight
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
 | Scheduled time-driven trigger writes data (not custom `=GET_*()` functions) | Custom functions recalc unpredictably and can't reliably hold cache (PLAN.md §5.4) | — Pending |
-| Two-runtime architecture (service-account layout builder + clasp Apps Script) | Version-control sheet structure in code; isolate build-time vs run-time | — Pending |
+| Two-runtime architecture (service-account layout builder + clasp Apps Script) | Version-control sheet structure in code; isolate build-time vs run-time | ✓ Established in Phase 1 (both packages scaffolded, deps isolated) |
+| Apps Script globals exposed via top-level `function` shims (`appendGlobals.ts`), not runtime `globalThis` assignment alone | `bun build --format=iife` traps declarations in a closure; the editor function picker only discovers static top-level `function` declarations. Runtime `globalThis.x = x` is invisible to the picker. | ✓ Phase 1 — pattern proven; future `refreshAll`/`installTrigger`/`removeTrigger` add one line to the `ENTRY_GLOBALS` array |
 | Fresh greenfield build (no existing deployed project to preserve) | Repo is only a scaffold; no live bound script to extend | — Pending |
 | Raw HTTP everywhere, no SDKs | Apps Script has no npm runtime; layout builder only talks to Sheets API | — Pending |
 | On-chain balance fetch gated behind `FETCH_BALANCES` flag, manual holdings first | Avoid two failure modes (price refresh + RPC) at once; RPC rate limits | — Pending |
@@ -96,4 +97,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-06-13 after initialization*
+*Last updated: 2026-06-14 after Phase 1 (Foundation) completion*
