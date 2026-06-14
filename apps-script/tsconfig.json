@@ -1,0 +1,32 @@
+{
+  "compilerOptions": {
+    // Environment setup — Apps Script runs Google's V8, not Bun/Node.
+    "lib": ["ESNext"],
+    "target": "ESNext",
+    "module": "Preserve",
+    "moduleDetection": "force",
+
+    // Apps Script globals (Logger, GoogleAppsScript.*) — NOT bun.
+    "types": ["google-apps-script"],
+
+    // Bundler mode — bun build inlines JSON + resolves .ts imports.
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "resolveJsonModule": true,
+    "noEmit": true,
+
+    // Best practices (mirror root strict flags).
+    "strict": true,
+    "skipLibCheck": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+
+    // Relaxed (match root).
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noPropertyAccessFromIndexSignature": false
+  },
+  "include": ["src"]
+}
