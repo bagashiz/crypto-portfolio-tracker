@@ -52,7 +52,16 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. Running `layout-builder --update` re-applies all structural changes (headers, formats, formulas) and leaves existing DCA Log data rows byte-for-byte unchanged
   3. Running `--update` twice in a row produces the same spreadsheet state as running it once (idempotent)
 
-**Plans**: TBD
+> **Scope note (Phase 2 CONTEXT D-08):** Phase 2 delivers the STATIC skeleton only — tab creation, headers, frozen rows, summary-block labels, number formats, empty cells. All PnL/cost-basis/allocation **formulas** and **conditional formatting** are deferred to Phase 5 (extends the same builder files). SC#1's "...and formulas" is intentionally reinterpreted to skeleton-only for this phase; absent formulas in Phase 2 are not a gap. Idempotency (SC#2, SC#3) applies fully to the structural ranges Phase 2 writes.
+
+**Plans**: 2 plans
+
+**Wave 1**
+
+- [ ] 02-01-PLAN.md — Foundation: .env-sourced config, service-account auth client, and pure Dashboard + DCA Log skeleton request-builders with provable data-region safety
+- [ ] 02-02-PLAN.md — CLI orchestrator: `--build` (tab-existence guard, never spreadsheets.create) + `--update` (structural-only) dispatch, package.json node --env-file scripts, README
+
+> 02-02 depends on 02-01 (Wave 2). Listed here under the phase; execution waves are read from each plan's frontmatter.
 
 ### Phase 3: Data Layer
 
@@ -106,7 +115,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 2/2 | Complete    | 2026-06-14 |
-| 2. Layout Builder | 0/TBD | Not started | - |
+| 2. Layout Builder | 0/2 | Planned     | - |
 | 3. Data Layer | 0/TBD | Not started | - |
 | 4. Refresh & Caching | 0/TBD | Not started | - |
 | 5. PnL & Allocation | 0/TBD | Not started | - |
