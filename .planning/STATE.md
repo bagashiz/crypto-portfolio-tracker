@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Phase 1 context gathered
-last_updated: "2026-06-14T05:32:14.083Z"
+status: verifying
+stopped_at: Completed 01-02-PLAN.md
+last_updated: "2026-06-14T05:59:05.272Z"
 last_activity: 2026-06-14 -- Phase 01 execution started
 progress:
   total_phases: 5
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 1
-  percent: 0
+  completed_plans: 2
+  percent: 20
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-06-13)
 
 Phase: 01 (foundation) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-06-14 -- Phase 01 execution started
 
 Progress: [░░░░░░░░░░] 0%
@@ -53,6 +53,7 @@ Progress: [░░░░░░░░░░] 0%
 
 *Updated after each plan completion*
 | Phase 01 P01 | 5min | 2 tasks | 7 files |
+| Phase 01 P02 | multi-session | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -67,6 +68,7 @@ Recent decisions affecting current work:
 - Pre-roadmap: FETCH_BALANCES flag gates Solana RPC to avoid two failure modes at once
 - [Phase ?]: Single shared assets.json at repo root is the one source of truth (D-04), not two per-runtime configs
 - [Phase ?]: assets.json uses placeholder mint/XAUt-ticker strings; exact values are a Phase 3 blocker (D-07)
+- [Phase ?]: Apps Script editor function picker discovers functions via STATIC top-level function declarations only — expose globals via entry.ts __ENTRY__ namespace + post-build top-level shims (appendGlobals.ts), not runtime globalThis assignment (D-03 refinement)
 
 ### Pending Todos
 
@@ -86,6 +88,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-06-14T05:31:51.778Z
-Stopped at: Phase 1 context gathered
-Resume file: .planning/phases/01-foundation/01-CONTEXT.md
+Last session: 2026-06-14T05:59:05.266Z
+Stopped at: Completed 01-02-PLAN.md
+Resume file: None

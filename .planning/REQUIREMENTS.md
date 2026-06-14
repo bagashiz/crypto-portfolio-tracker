@@ -10,7 +10,7 @@ Requirements for the initial release. Each maps to a roadmap phase.
 ### Project Setup
 
 - [x] **SETUP-01**: Two-runtime repo skeleton exists with separate dependency sets — `layout-builder/` (Node + `googleapis`) and `apps-script/` (TypeScript) — plus `.gitignore` and per-runtime READMEs
-- [ ] **SETUP-02**: Apps Script TS toolchain compiles `src/` to flat `dist/` with trigger entry points as top-level globals; `clasp push` of `dist/` works and a deployed function is globally callable; a `deploy` script wires build + push
+- [x] **SETUP-02**: Apps Script TS toolchain compiles `src/` to flat `dist/` with trigger entry points as top-level globals; `clasp push` of `dist/` works and a deployed function is globally callable; a `deploy` script wires build + push
 
 ### Configuration
 
@@ -81,7 +81,7 @@ Which phases cover which requirements. Populated during roadmap creation.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | SETUP-01 | Phase 1 | Complete |
-| SETUP-02 | Phase 1 | Pending |
+| SETUP-02 | Phase 1 | Complete |
 | CONFIG-01 | Phase 1 | Complete |
 | SEC-03 | Phase 1 | Complete |
 | LAYOUT-01 | Phase 2 | Pending |
