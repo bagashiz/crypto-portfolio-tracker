@@ -1,8 +1,12 @@
 {
   "name": "crypto-portfolio-tracker",
-  "module": "index.ts",
   "type": "module",
   "private": true,
+  "workspaces": ["layout-builder", "apps-script"],
+  "scripts": {
+    "deploy": "bun run --filter apps-script deploy",
+    "build:apps-script": "bun run --filter apps-script build"
+  },
   "devDependencies": {
     "@types/bun": "latest"
   },

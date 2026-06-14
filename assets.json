@@ -1,0 +1,58 @@
+[
+  {
+    "id": "BTC",
+    "venue": "hyperliquid",
+    "ticker": "BTC",
+    "target": 0.4,
+    "risk": 2,
+    "apy": 0
+  },
+  {
+    "id": "HYPE",
+    "venue": "hyperliquid",
+    "ticker": "HYPE",
+    "target": 0.2,
+    "risk": 4,
+    "apy": 0
+  },
+  {
+    "id": "XAUt",
+    "venue": "hyperliquid",
+    "ticker": "PLACEHOLDER_TICKER_phase3",
+    "target": 0.1,
+    "risk": 1,
+    "apy": 0
+  },
+  {
+    "id": "IVVon",
+    "venue": "solana",
+    "mint": "PLACEHOLDER_MINT_phase3",
+    "target": 0.1,
+    "risk": 2,
+    "apy": 5
+  },
+  {
+    "id": "PST",
+    "venue": "solana",
+    "mint": "PLACEHOLDER_MINT_phase3",
+    "target": 0.05,
+    "risk": 3,
+    "apy": 8
+  },
+  {
+    "id": "ONyc",
+    "venue": "solana",
+    "mint": "PLACEHOLDER_MINT_phase3",
+    "target": 0.05,
+    "risk": 3,
+    "apy": 7
+  },
+  {
+    "id": "USDy",
+    "venue": "solana",
+    "mint": "PLACEHOLDER_MINT_phase3",
+    "target": 0.1,
+    "risk": 1,
+    "apy": 5
+  }
+]
