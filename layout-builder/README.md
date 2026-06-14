@@ -17,8 +17,39 @@ machine on demand.
 the single source of truth for the asset registry. Assets are never duplicated here;
 adding or removing an asset is a one-line edit in `assets.json`.
 
-## Status
+## Setup
 
-Phase 1 scaffolds this package only (declared `googleapis` dependency, config wiring,
-this README). **Phase 2** implements the actual `--build` / `--update` CLI
-(`src/index.js`, `src/auth.js`, `src/dashboardSheet.js`, `src/dcaLogSheet.js`).
+### 1. `.env` (gitignored)
+
+The target spreadsheet ID is supplied at runtime via a gitignored `.env` (it is never
+committed to git). `layout-builder` runs on **Node**, so Bun's auto-`.env` loading does
+NOT apply — the value is loaded by `node --env-file=.env`. Create `layout-builder/.env`:
+
+```
+SPREADSHEET_ID=<the target spreadsheet id>
+```
+
+The ID is the long token in the sheet URL: `https://docs.google.com/spreadsheets/d/<id>/edit`.
+
+### 2. Service-account key (gitignored)
+
+Place the service-account JSON key at `layout-builder/service-account.key.json`
+(gitignored — never committed, never pushed to Apps Script). Then **share the target
+spreadsheet with the service-account email as Editor** (the builder targets a
+pre-existing, pre-shared sheet — it never creates one).
+
+## Commands
+
+```sh
+# First-time creation: creates the Dashboard + DCA Log tabs and stamps structure.
+npm run build            # = node --env-file=.env src/index.js --build
+
+# Idempotent re-apply: re-stamps structure/formats/frozen rows.
+npm run update           # = node --env-file=.env src/index.js --update
+```
+
+> `--build` **refuses with an error** if the Dashboard or DCA Log tab already exists —
+> use `--update` instead (it never deletes or recreates a tab).
+>
+> `--update` re-applies only the structural band and **never touches the DCA Log
+> transaction (data) rows** — running it twice is identical to running it once.
