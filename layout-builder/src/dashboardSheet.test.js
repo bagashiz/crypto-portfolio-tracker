@@ -5,8 +5,8 @@
 // network — runnable under `bun test` with no credentials.
 //
 // SPREADSHEET_ID must be set for config.js (imported transitively) to load.
-process.env.SPREADSHEET_ID ??= "test-spreadsheet-id";
-
+// Imported FIRST so the env var exists before config.js is evaluated (import order).
+import "./testEnv.js";
 import { test, expect } from "bun:test";
 import assets from "../../assets.json" with { type: "json" };
 import { dashboardBuildRequests, dashboardUpdateRequests } from "./dashboardSheet.js";
