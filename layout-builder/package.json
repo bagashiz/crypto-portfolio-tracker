@@ -3,8 +3,8 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "build": "echo 'layout-builder --build not implemented in Phase 1 (Phase 2)' && exit 0",
-    "update": "echo 'layout-builder --update not implemented in Phase 1 (Phase 2)' && exit 0"
+    "build": "node --env-file=.env src/index.js --build",
+    "update": "node --env-file=.env src/index.js --update"
   },
   "dependencies": {
     "googleapis": "latest"
