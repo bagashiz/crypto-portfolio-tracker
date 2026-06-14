@@ -58,7 +58,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 **Wave 1**
 
-- [ ] 02-01-PLAN.md — Foundation: .env-sourced config, service-account auth client, and pure Dashboard + DCA Log skeleton request-builders with provable data-region safety
+- [x] 02-01-PLAN.md — Foundation: .env-sourced config, service-account auth client, and pure Dashboard + DCA Log skeleton request-builders with provable data-region safety
 - [ ] 02-02-PLAN.md — CLI orchestrator: `--build` (tab-existence guard, never spreadsheets.create) + `--update` (structural-only) dispatch, package.json node --env-file scripts, README
 
 > 02-02 depends on 02-01 (Wave 2). Listed here under the phase; execution waves are read from each plan's frontmatter.
@@ -115,7 +115,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 2/2 | Complete    | 2026-06-14 |
-| 2. Layout Builder | 0/2 | Planned     | - |
+| 2. Layout Builder | 1/2 | In Progress|  |
 | 3. Data Layer | 0/TBD | Not started | - |
 | 4. Refresh & Caching | 0/TBD | Not started | - |
 | 5. PnL & Allocation | 0/TBD | Not started | - |
