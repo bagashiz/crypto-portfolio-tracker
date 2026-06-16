@@ -90,7 +90,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 **Wave 2** *(depends on 03-01)*
 
-- [ ] 03-02-PLAN.md — Providers: HyperliquidApi (spot mids via spotMetaAndAssetCtxs + balances) and JupiterApi (price/v3 + ultra/v1/balances) with pure tested parsers enforcing D-09/D-10/D-13 (DATA-01/02/03)
+- [x] 03-02-PLAN.md — Providers: HyperliquidApi (spot mids via spotMetaAndAssetCtxs + balances) and JupiterApi (price/v3 + ultra/v1/balances) with pure tested parsers enforcing D-09/D-10/D-13 (DATA-01/02/03)
 
 **Wave 3** *(depends on 03-01, 03-02)*
 
@@ -135,6 +135,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 |-------|----------------|--------|-----------|
 | 1. Foundation | 2/2 | Complete    | 2026-06-14 |
 | 2. Layout Builder | 3/3 | Complete    | 2026-06-16 |
-| 3. Data Layer | 1/3 | In Progress|  |
+| 3. Data Layer | 2/3 | In Progress|  |
 | 4. Refresh & Caching | 0/TBD | Not started | - |
 | 5. PnL & Allocation | 0/TBD | Not started | - |
