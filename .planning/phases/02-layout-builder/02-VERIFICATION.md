@@ -1,43 +1,24 @@
 ---
 phase: 02-layout-builder
-verified: 2026-06-14T00:00:00Z
-status: gaps_found
-score: 5/6 must-haves verified
+verified: 2026-06-16T00:00:00Z
+status: passed
+score: 6/6 must-haves verified
 overrides_applied: 0
-gaps:
-  - truth: "`layout-builder --update` leaves existing DCA Log data rows byte-for-byte unchanged (SC#2 / LAYOUT-02)"
-    status: partial
-    reason: >
-      The data-region guard holds ONLY for a fixed asset registry. DATA_START_ROW is
-      derived at runtime as `assets.length + 3` (config.js:44), so the protected boundary
-      floats with the asset count. After the documented one-line add of an asset to
-      assets.json (CONFIG-01), re-running `--update` re-stamps the transaction header row
-      directly onto the first existing transaction data row, overwriting real DCA data with
-      header text — the exact irreversible-data-loss class LAYOUT-02 exists to prevent.
-      Confirmed by simulation: built with 7 assets -> data at row 10; add 1 asset ->
-      tx-header re-stamped at row 10 (= first data row). The data-safety unit test cannot
-      catch this because it imports the same derived DATA_START_ROW, so its assertion
-      boundary moves in lockstep with the band and stays green while real rows are clobbered.
-    artifacts:
-      - path: "layout-builder/src/config.js"
-        issue: "DATA_START_ROW = assets.length + 3 floats with the registry; not pinned to a fixed absolute row decided at build time"
-      - path: "layout-builder/src/dcaLogSheet.js"
-        issue: "TX_HEADER_ROW = DATA_START_ROW - 1 and summary-block rows are all positioned from the floating value (lines 23-36, 87-115)"
-      - path: "layout-builder/src/dcaLogSheet.test.js"
-        issue: "Critical assertion imports the same derived DATA_START_ROW; boundary moves with the band, so it cannot detect the floating-boundary overwrite (line 30, 64)"
-    missing:
-      - "Pin the DCA Log band boundary to a fixed constant independent of assets.length (e.g. MAX_SUMMARY_ROWS reserving a fixed gap so DATA_START_ROW never moves)"
-      - "Leave summary rows beyond assets.length blank rather than shifting the transaction header"
-      - "Add a test asserting DATA_START_ROW equals a hard-coded literal (not a value derived from assets.length) so a registry change that would move the boundary fails the suite loudly"
-      - "Alternatively, read the persisted boundary back from the live sheet and refuse --update if the on-sheet header row no longer matches"
+re_verification:
+  previous_status: gaps_found
+  previous_score: 5/6
+  gaps_closed:
+    - "`layout-builder --update` leaves existing DCA Log data rows byte-for-byte unchanged (SC#2 / LAYOUT-02) — DATA_START_ROW now a fixed literal (23), boundary no longer floats with the registry"
+  gaps_remaining: []
+  regressions: []
 ---
 
 # Phase 2: Layout Builder Verification Report
 
-**Phase Goal:** A user can build and idempotently update the complete spreadsheet structure from the command line without touching DCA Log data rows.
-**Verified:** 2026-06-14
-**Status:** gaps_found
-**Re-verification:** No — initial verification
+**Phase Goal:** Deliver the local layout-builder — .env-sourced config, service-account auth, pure Dashboard + DCA Log skeleton request-builders, and a `--build`/`--update` CLI orchestrator — with provable, non-floating DCA Log data-region safety (LAYOUT-02): adding an asset and re-running `--update` must never overwrite real DCA transaction rows.
+**Verified:** 2026-06-16
+**Status:** passed
+**Re-verification:** Yes — after 02-03 gap closure (LAYOUT-02 fixed-boundary fix)
 
 ## Goal Achievement
 
@@ -45,101 +26,98 @@ gaps:
 
 | #   | Truth | Status | Evidence |
 | --- | ----- | ------ | -------- |
-| 1   | `--build` creates Dashboard + DCA Log tabs with correct headers, frozen rows, summary-block labels, authenticated via service account (SC#1, skeleton-only per D-08) | ✓ VERIFIED | `index.js:78-117` runBuild creates both tabs (addSheet, never `spreadsheets.create` — confirmed `grep` returns 0 matches), resolves gridIds, stamps `dashboardBuildRequests` + `dcaLogBuildRequests`. `auth.js:26-32` returns authenticated Sheets v4 client via `GoogleAuth` with single `auth/spreadsheets` scope. Headers verified: DCA Log 9-col header `["Date","Asset","Type","Price","Qty","Total","Fee","Net Cost","Notes"]` asserted by passing test; Dashboard Zone A/B headers in `dashboardSheet.js:21,25`. Frozen rows via `updateSheetProperties.gridProperties.frozenRowCount`. |
-| 2   | `--build` refuses (directing to `--update`) if either tab already exists (D-04 guard) | ✓ VERIFIED | `index.js:82-88` filters existing tabs and throws a clear Error directing to `--update`; never deletes/recreates. |
-| 3   | `--update` re-applies structural changes (SC#2 structural portion) | ✓ VERIFIED | `index.js:121-149` runUpdate resolves existing gridIds (errors to `--build` if missing) and appends only `dashboardUpdateRequests` + `dcaLogUpdateRequests`; no ad-hoc range write/clear in the update branch. |
-| 4   | `--update` leaves existing DCA Log data rows byte-for-byte unchanged (SC#2 / LAYOUT-02) | ✗ FAILED | Guard holds only for a FIXED registry. `DATA_START_ROW = assets.length + 3` (config.js:44) floats. Simulation: build@7 assets -> data row 10; add 1 asset -> `--update` re-stamps tx-header at row 10 = first data row -> overwrites real transactions. Test boundary moves in lockstep (test imports same derived value) and stays green. See CR-01 evaluation below. |
-| 5   | `--update` twice produces the same state as once (SC#3, idempotent) | ✓ VERIFIED (for fixed registry) | `dcaLogUpdateRequests(0)` deep-equals across calls (passing deterministic test); update builders are pure and share `bandRequests`. NOTE: idempotency holds only while the registry is unchanged between the two runs — the same floating-boundary flaw (#4) means a registry edit between runs is non-idempotent and destructive. |
-| 6   | Skeleton-only scope honored — no formulas / no conditional formatting (D-08) | ✓ VERIFIED | `grep` for `formulaValue`/`addConditionalFormatRule` in both builders matches only comments. Tests assert `JSON.stringify` of all four builders contains neither substring (4 passing assertions). Per D-08 and ROADMAP scope note, absent formulas are NOT a gap. |
+| 1   | `--build` creates Dashboard + DCA Log tabs with correct headers, frozen rows, summary-block labels, authenticated via service account (SC#1, skeleton-only per D-08) | ✓ VERIFIED (regression OK) | `index.js:78-117` runBuild creates both tabs via `addSheet` (never `spreadsheets.create` — `grep -c spreadsheets.create` = 0), resolves gridIds, stamps build requests. `auth.js:19,27` GoogleAuth service-account JWT, single `auth/spreadsheets` scope. DCA Log 9-col header asserted by passing test. Files untouched by 02-03 — no regression. |
+| 2   | `--build` refuses (directing to `--update`) if either tab already exists (D-04 guard) | ✓ VERIFIED (regression OK) | `index.js:82-88` filters existing tabs and throws a clear Error directing to `--update`. Untouched by 02-03. |
+| 3   | `--update` re-applies structural changes only (SC#2 structural portion) | ✓ VERIFIED (regression OK) | `index.js:121-149` runUpdate resolves gridIds (errors to `--build` if missing), appends only `dashboardUpdateRequests` + `dcaLogUpdateRequests`; no ad-hoc range write/clear. Untouched by 02-03. |
+| 4   | `--update` leaves existing DCA Log data rows byte-for-byte unchanged after a CONFIG-01 asset add (SC#2 / LAYOUT-02) — non-floating | ✓ VERIFIED (gap closed) | `config.js:64` `DATA_START_ROW = MAX_SUMMARY_ROWS + 3` = fixed literal 23, NO `assets.length` term (`grep "DATA_START_ROW.*assets\.length"` = empty). Simulation (registry=7/8/12): transaction header stays at 0-based row 21, maxEndRowIndex stays at 22 (= DATA_START_ROW-1, exclusive), data region (row 23+ 1-based) never addressed. The prior failing scenario (8 assets → header re-stamped onto data row 10) is now safe. Overflow at 21 assets throws loudly. |
+| 5   | `--update` twice produces the same state as once (SC#3, idempotent) — now unconditional across registry edits | ✓ VERIFIED | `dcaLogUpdateRequests(0)` deep-equals across calls (passing test, line 147-149). Band is pure and positioned from the fixed boundary, so a registry edit between runs is no longer destructive — the conditional caveat from the prior verification is removed by the fix. |
+| 6   | Skeleton-only scope honored — no formulas / no conditional formatting (D-08) | ✓ VERIFIED | `grep formulaValue\|addConditionalFormatRule src/dcaLogSheet.js` = 0 matches. Tests assert both builders' JSON contains neither substring (lines 138-145, passing). Per D-08 / CONTEXT scope-reinterpretation flag, absent formulas are NOT a gap. |
 
-**Score:** 5/6 truths verified (truth #4 FAILED — BLOCKER)
+**Score:** 6/6 truths verified (truth #4 — the prior BLOCKER — now closed)
 
 ### Required Artifacts
 
 | Artifact | Expected | Status | Details |
 | -------- | -------- | ------ | ------- |
-| `layout-builder/src/config.js` | SPREADSHEET_ID from env, DASHBOARD/DCA_LOG, DATA_START_ROW, assets re-export | ⚠️ SUBSTANTIVE but defective | Env-sourced ID with fail-fast verified (import throws when unset). DASHBOARD/DCA_LOG present. `assets` re-export present. DATA_START_ROW present but DERIVED (`assets.length + 3`) — the root of CR-01. |
-| `layout-builder/src/auth.js` | getSheetsClient() authenticated Sheets v4 client | ✓ VERIFIED | `GoogleAuth` with keyFile `service-account.key.json`, single `auth/spreadsheets` scope; returns `google.sheets({version:"v4"})`. grep confirms scope + keyfile. |
-| `layout-builder/src/dashboardSheet.js` | dashboardBuildRequests / dashboardUpdateRequests | ✓ VERIFIED | Pure builders, Zone A (rows 1-10) + Zone B (rows 12-21) labels/formats/frozen row, per-asset rows iterate registry. Formula-free. |
-| `layout-builder/src/dcaLogSheet.js` | dcaLogBuild/UpdateRequests with data-region safety | ⚠️ SUBSTANTIVE but defective | Emits top-of-data band only; never addresses rows >= DATA_START_ROW — correct in principle, but the boundary itself floats (CR-01), so "above the data region" is not stable across registry edits. |
-| `layout-builder/src/dcaLogSheet.test.js` | Assert no update request touches rows >= DATA_START_ROW | ⚠️ PRESENT but blind to CR-01 | Critical assertion present and passing, but imports the same derived DATA_START_ROW so it cannot detect the floating-boundary overwrite. |
-| `layout-builder/src/index.js` | CLI dispatch --build/--update, tab-existence guard, batched orchestration | ✓ VERIFIED | `node --check` passes; process.argv dispatch, getSheetsClient, batchUpdate, no spreadsheets.create. |
-| `layout-builder/package.json` | real build/update scripts via node --env-file=.env | ✓ VERIFIED | `build`/`update` invoke `node --env-file=.env src/index.js --build|--update`; no echo stubs; type=module + googleapis preserved. |
-| `layout-builder/README.md` | documented CLI + .env setup | ✓ VERIFIED | Documents .env SPREADSHEET_ID, key placement/sharing, both commands, refuse-if-exists + data-safety caveats. |
+| `layout-builder/src/config.js` | SPREADSHEET_ID from env, DASHBOARD/DCA_LOG, FIXED DATA_START_ROW + MAX_SUMMARY_ROWS, assets re-export | ✓ VERIFIED | `MAX_SUMMARY_ROWS = 20` (line 60); `DATA_START_ROW = MAX_SUMMARY_ROWS + 3` = literal 23 (line 64), zero `assets.length` term. SPREADSHEET_ID fail-fast (lines 21-26), DASHBOARD/DCA_LOG, `assets` re-export all preserved. Banner documents the fixed row map and the LAYOUT-02 defect closed. |
+| `layout-builder/src/dcaLogSheet.js` | Band positioned from FIXED boundary; reserved rows blank; loud overflow guard; data-region safety | ✓ VERIFIED | Imports `MAX_SUMMARY_ROWS` (line 27); `TX_HEADER_ROW = DATA_START_ROW - 1` resolves to fixed 22; summary labels fill top-down rows 2..1+N (line 125-128); reserved rows blank; overflow guard throws when `assetList.length > MAX_SUMMARY_ROWS` (lines 106-112); every range bounded above DATA_START_ROW. |
+| `layout-builder/src/config.test.js` | Asserts DATA_START_ROW equals a hard literal AND invariant under registry length | ✓ VERIFIED (created) | Asserts `DATA_START_ROW === 23` (hard literal, line 27-28), `=== MAX_SUMMARY_ROWS + 3` (line 32), `MAX_SUMMARY_ROWS === 20`, and `not.toBe(assets.length + 3)` (line 41) — proves the boundary is not registry-derived. |
+| `layout-builder/src/dcaLogSheet.test.js` | Data-region-safety assertion anchored to the fixed literal (not re-derived) | ✓ VERIFIED | `DATA_START_ROW_LITERAL = 23` (line 21); `DATA_START_ROW_0BASED = 23 - 1` (line 38); critical assertion bounds every range `<= DATA_START_ROW_0BASED` (lines 65-79); registry-invariance test (header at fixed 0-based 21, lines 92-97); overflow-guard test (lines 120-126); full-capacity boundary test (lines 130-136). |
+| `layout-builder/src/auth.js` | getSheetsClient() authenticated Sheets v4 client | ✓ VERIFIED (regression OK) | GoogleAuth service-account JWT, single `auth/spreadsheets` scope, keyfile path. Untouched by 02-03. |
+| `layout-builder/src/dashboardSheet.js` | dashboardBuild/UpdateRequests, formula-free | ✓ VERIFIED (regression OK) | Pure builders, Zone A/B labels/formats. Untouched by 02-03. |
+| `layout-builder/src/index.js` | CLI dispatch --build/--update, tab-existence guard, batched orchestration | ✓ VERIFIED (regression OK) | `node --check` passes; argv dispatch; no `spreadsheets.create`. Untouched by 02-03. |
+| `layout-builder/package.json` | real build/update scripts via node --env-file=.env | ✓ VERIFIED (regression OK) | Per prior verification; untouched by 02-03. |
+| `layout-builder/README.md` | documented CLI + .env setup | ✓ VERIFIED (regression OK) | Per prior verification; untouched by 02-03. |
 
 ### Key Link Verification
 
 | From | To | Via | Status | Details |
 | ---- | -- | --- | ------ | ------- |
-| dashboardSheet.js | config.js | import assets, DASHBOARD | ✓ WIRED | `import { assets, DASHBOARD } from "./config.js"` (line 15) |
-| dcaLogSheet.js | config.js | import DCA_LOG, DATA_START_ROW | ✓ WIRED | `import { assets, DCA_LOG, DATA_START_ROW } from "./config.js"` (line 19) |
-| index.js | auth.js | getSheetsClient() | ✓ WIRED | imported and invoked in main() (lines 25, 161) |
-| index.js | dashboardSheet.js + dcaLogSheet.js | build/update request-builders | ✓ WIRED | all four builders imported and used in runBuild/runUpdate (lines 27-28, 108-111, 139-142) |
+| dcaLogSheet.js | config.js | import DATA_START_ROW, MAX_SUMMARY_ROWS | ✓ WIRED | `import { assets, DCA_LOG, DATA_START_ROW, MAX_SUMMARY_ROWS } from "./config.js"` (line 27); both used to position the band and guard overflow |
+| dcaLogSheet.test.js | config.js | import DATA_START_ROW (asserted == literal 23) | ✓ WIRED | Line 12 import; line 84-85 asserts `DATA_START_ROW === 23`; safety ranges asserted against the literal, not the import |
+| config.test.js | config.js / testEnv.js | import after testEnv, assert literal | ✓ WIRED | `import "./testEnv.js"` (line 12) before config import (line 14) — SPREADSHEET_ID idiom; assertions against hard literal |
+| index.js | dcaLogSheet.js + dashboardSheet.js + auth.js | build/update builders + getSheetsClient | ✓ WIRED | All builders imported and used in runBuild/runUpdate; auth client invoked in main() |
+
+### Data-Flow Trace (Level 4)
+
+| Artifact | Data Variable | Source | Produces Real Data | Status |
+| -------- | ------------- | ------ | ------------------ | ------ |
+| dcaLogSheet.js band | `assetList` (defaults to `assets`) | `assets.json` (7 real assets) → request builders | Yes — labels emitted per asset, ranges fixed above boundary | ✓ FLOWING (N/A for rendering; emits API requests, verified by simulation) |
+
+The builders are pure request producers, not dynamic-data renderers; Level 4 is satisfied by confirming the request set is computed from the real registry and bounded above the fixed boundary (simulation across registry sizes 7/8/12).
 
 ### Behavioral Spot-Checks
 
 | Behavior | Command | Result | Status |
 | -------- | ------- | ------ | ------ |
-| Full unit suite passes | `bun test` (run once) | 12 pass / 0 fail, 72 assertions, 2 files | ✓ PASS |
+| Full unit suite passes | `bun test` (run once) | 23 pass / 0 fail, 92 assertions, 3 files | ✓ PASS |
 | index.js valid ESM | `node --check src/index.js` | no error | ✓ PASS |
-| No spreadsheets.create (D-01) | `grep spreadsheets.create src/index.js` | 0 matches | ✓ PASS |
+| DATA_START_ROW not derived from registry | `grep -E "DATA_START_ROW\s*=.*assets\.length" src/config.js` | 0 matches | ✓ PASS |
+| MAX_SUMMARY_ROWS wired through | `grep -l MAX_SUMMARY_ROWS src/config.js src/dcaLogSheet.js` | both files | ✓ PASS |
+| Test anchored to hard literal 23 | `grep -n "23" src/dcaLogSheet.test.js` | DATA_START_ROW_LITERAL = 23 + boundary uses | ✓ PASS |
+| Fixed-boundary data-safety simulation (closes prior CR-01) | registry 7/8/12 → header @ 0-based 21, maxEnd 22, safe | header fixed, data region never addressed across all sizes | ✓ PASS |
+| Overflow guard fails loudly | 21-asset registry → builder throws /MAX_SUMMARY_ROWS/ | throws as designed | ✓ PASS |
+| No spreadsheets.create (D-01) | `grep -c spreadsheets.create src/index.js` | 0 | ✓ PASS |
 | Two-runtime isolation | `grep -rn apps-script src/` | 0 matches | ✓ PASS |
-| config.js fail-fast on missing SPREADSHEET_ID | dynamic import without env | throws as designed | ✓ PASS |
-| Floating-boundary data-loss simulation (CR-01) | derived-row arithmetic (build@7 vs update@8) | tx-header row 10 == first data row 10 -> overwrite | ✗ FAIL (confirms CR-01) |
 
 ### Probe Execution
 
-Not applicable — no `scripts/*/tests/probe-*.sh` and phase does not declare probes. (Unit suite serves as the runnable check; run once above.)
+Not applicable — no `scripts/*/tests/probe-*.sh` and the phase declares no probes. The unit suite (run once above) is the runnable check.
 
 ### Requirements Coverage
 
 | Requirement | Source Plan | Description | Status | Evidence |
 | ----------- | ----------- | ----------- | ------ | -------- |
-| LAYOUT-01 | 02-01, 02-02 | `--build` creates tabs with headers/formatting/frozen rows/summary rows (formulas deferred per D-08), authenticated via SA | ✓ SATISFIED | runBuild + auth.js + builders; tab-existence guard; needs human run for live-sheet confirmation |
-| LAYOUT-02 | 02-01, 02-02 | `--update` idempotently re-applies structure without ever altering DCA Log data rows | ✗ BLOCKED | Data-row safety is conditional on a fixed registry; floating DATA_START_ROW overwrites live data on registry change (CR-01). The "without ever altering DCA Log data rows" clause is not unconditionally met. |
+| LAYOUT-01 | 02-01, 02-02 | `--build` creates tabs with headers/formatting/frozen rows/summary rows (formulas deferred per D-08), authenticated via SA | ✓ SATISFIED | runBuild + auth.js + builders + tab-existence guard; live-sheet run is the only human check (see below) |
+| LAYOUT-02 | 02-01, 02-02, 02-03 | `--update` idempotently re-applies structure without ever altering DCA Log data rows | ✓ SATISFIED | Prior BLOCKER closed by 02-03: DATA_START_ROW pinned to fixed literal 23; band positioned from fixed boundary; registry edit can no longer move the header onto a data row; overflow fails loudly; test anchored to hard literal + invariance + overflow tests |
 
-No orphaned requirements: REQUIREMENTS.md maps only LAYOUT-01, LAYOUT-02 to Phase 2; both are claimed by the plans.
+No orphaned requirements: REQUIREMENTS.md maps only LAYOUT-01, LAYOUT-02 to Phase 2; both are claimed by the plans (02-03 adds LAYOUT-02 to close the gap).
 
 ### Anti-Patterns Found
 
 | File | Line | Pattern | Severity | Impact |
 | ---- | ---- | ------- | -------- | ------ |
-| config.js | 44 | Runtime-derived safety boundary (`assets.length + 3`) for an irreversible-data-loss guard | 🛑 Blocker | Root cause of CR-01 — see gap #4 |
-| index.js | 159 | `void google;` dead-code-as-intent (unused top-level googleapis import) | ℹ️ Info | Cosmetic (IN-01); not goal-blocking |
-| package.json | 10 | `googleapis: "latest"` unpinned | ⚠️ Warning | Non-reproducible install (WR-05); supply-chain note; not goal-blocking |
+| (none) | — | — | — | The prior 🛑 Blocker (config.js:44 runtime-derived safety boundary) is RESOLVED — `DATA_START_ROW` is now a fixed literal |
 
-No `TBD`/`FIXME`/`XXX` debt markers found in phase files. No stub/placeholder rendering paths (empty value cells are intentional per D-08, label-only summary rows are documented phase boundary).
-
-## Independent Evaluation of Code Review CR-01
-
-The review (02-REVIEW.md) flags as CRITICAL that `DATA_START_ROW = assets.length + 3` floats with the registry. I evaluated this independently against the actual code rather than trusting the review.
-
-**Verdict: CR-01 is a GENUINE threat to the phase goal — confirmed, not dismissed.**
-
-Evidence gathered:
-1. **Code confirms the derivation.** `config.js:44` literally computes `export const DATA_START_ROW = assets.length + 3;`. The SUMMARY even frames it as a feature ("stays consistent as assets grow").
-2. **The whole band is positioned from this floating value.** `dcaLogSheet.js:36` sets `TX_HEADER_ROW = DATA_START_ROW - 1`; summary rows and the transaction header all move when the count changes.
-3. **Arithmetic simulation confirms data loss.** Built with the current 7 assets, data starts at row 10. Adding an 8th asset (a CONFIG-01 one-line edit the project explicitly supports) makes `--update` re-stamp the transaction header at row 10 — the first existing data row — overwriting a real transaction with header text. Removing an asset strands old data above a now-lower boundary.
-4. **The test is blind to it.** `dcaLogSheet.test.js:30` derives its assertion boundary from the same imported `DATA_START_ROW`, so the boundary and the band move together; the suite stays green while live rows are clobbered. All 12 tests pass — which is exactly why a passing suite is not evidence of the goal.
-5. **No mitigating safeguard exists.** No fixed-MAX reservation, no "do not edit the registry after build" warning in code/README, no on-sheet boundary read-back. `git log` confirms config.js (21:25) predates the review (21:37) and was not amended afterward.
-
-**Why this blocks the phase goal (not merely a quality nit):** The goal is "idempotently update ... *without touching DCA Log data rows*," and SC#2 demands data rows be "byte-for-byte unchanged." The guard satisfies this only under the unstated precondition "the asset registry never changes after the first build." But the registry is *designed* for one-line edits (CONFIG-01), and `--update` is the exact command the user would run after such an edit to re-apply structure. The realistic, intended operator workflow therefore drives directly into irreversible data loss — the precise risk LAYOUT-02 was written to eliminate. The safety property is real but conditional, and the condition is one the project actively encourages users to violate.
-
-This is not an override candidate: it is an unfixed defect, not an intentional, documented deviation. It is not deferrable: no later milestone phase (Phase 3-5 are Apps Script data/refresh/formulas) addresses layout-builder data-region safety.
+No `TBD`/`FIXME`/`XXX` debt markers in the modified files. The single `placeholder` grep hit (config.js:17) is a benign comment describing the SPREADSHEET_ID fail-fast mechanism, not a stub. The prior IN-01 (`void google;`) and WR-05 (`googleapis: "latest"`) info/warning items live in files untouched by 02-03 and remain non-goal-blocking.
 
 ### Human Verification Required
 
-None blocking the gap decision. (Live-sheet `--build`/`--update` against a real shared spreadsheet would normally be a human check for LAYOUT-01, but the phase already fails on truth #4 / LAYOUT-02, so status is gaps_found regardless; defer live UAT until the gap is closed.)
+None blocking. All goal truths are verified programmatically and the data-safety property is proven by simulation + literal-anchored tests.
+
+A live-sheet confirmation of LAYOUT-01 (`--build`/`--update` against a real shared spreadsheet) is a routine end-to-end smoke test, but it is not required to confirm the phase goal: tab creation, the existence guard, structural-only update, and the data-region safety mechanism are all verified statically and via the unit suite. It is recorded as optional operator UAT for whenever a real spreadsheet is wired up, not as a gate on this phase.
 
 ### Gaps Summary
 
-Five of six observable truths are verified: `--build` creation, the D-04 existence guard, structural `--update`, skeleton-only scope (D-08), and within-registry idempotency are all solid and well-tested. The auth, CLI, package scripts, README, and two-runtime isolation all check out.
+No gaps. This was a re-verification after gap-closure plan 02-03, which addressed the single blocking gap from the prior verification (truth #4 / LAYOUT-02).
 
-The single blocking gap is the DCA Log data-region safety boundary. The guard is implemented as "never address rows at/below `DATA_START_ROW`" — a sound mechanism — but `DATA_START_ROW` is derived from `assets.length` at runtime instead of pinned to the absolute row chosen when the sheet was built. Because the asset registry is explicitly meant to be edited (one-line add/remove), a registry change followed by `--update` shifts the protected boundary onto live transaction rows and overwrites them. This defeats SC#2 ("byte-for-byte unchanged") and the SC#3 idempotency guarantee across registry edits, and it is invisible to the existing test suite, which derives its assertion from the same floating value.
+The root defect — `DATA_START_ROW = assets.length + 3` floating the data-region boundary with the registry — is removed. `DATA_START_ROW` is now the fixed literal `23` (`MAX_SUMMARY_ROWS + 3`, line 64) with no `assets.length` term, confirmed by grep returning empty. The whole DCA Log band is positioned from this fixed boundary: the transaction header is locked at 1-based row 22 (0-based 21) regardless of asset count, summary labels fill top-down within the reserved 20-row block, reserved rows stay blank (D-08), and a registry exceeding `MAX_SUMMARY_ROWS` throws loudly rather than silently shifting the boundary.
 
-Fix direction (from CR-01, validated): pin the band boundary to a fixed constant (reserve a fixed max summary capacity so `DATA_START_ROW` never moves), leave unused summary rows blank, and add a test asserting `DATA_START_ROW` equals a hard literal so any future registry change that would move the boundary fails loudly.
+The data-safety test is now anchored to the hard literal `23` (not a value re-derived from the registry), with an added registry-invariance test and overflow-guard test — so any future change that would move the boundary fails the suite loudly. Independent simulation across registry sizes 7, 8, and 12 confirms the transaction header never moves and no request range ever reaches the data region (maxEndRowIndex stays at 22 = DATA_START_ROW - 1, exclusive). The exact failure scenario from the prior verification (add an 8th asset → `--update` re-stamps the header onto live data row 10) is now safe.
+
+The five previously-verified truths (`--build` creation, D-04 existence guard, structural `--update`, within-registry idempotency now unconditional, skeleton-only scope) are unchanged: 02-03 modified only config.js, dcaLogSheet.js, and the two co-located tests; auth.js, dashboardSheet.js, index.js, package.json, and README.md were untouched — no regression. Full suite: 23 pass / 0 fail.
 
 ---
 
-_Verified: 2026-06-14_
+_Verified: 2026-06-16_
 _Verifier: Claude (gsd-verifier)_
