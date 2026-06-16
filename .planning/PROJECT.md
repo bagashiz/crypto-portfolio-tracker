@@ -98,4 +98,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-06-14 after Phase 1 (Foundation) completion*
+*Last updated: 2026-06-16 after Phase 2 (Layout Builder) completion — `--build`/`--update` CLI shipped with provable, non-floating DCA Log data-region safety (LAYOUT-02 fixed: `DATA_START_ROW` is now a fixed literal, never floats with the asset registry).*
