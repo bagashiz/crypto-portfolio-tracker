@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation** - Repo skeleton, gitignore, Apps Script toolchain verified, asset config registry in place (completed 2026-06-14)
 - [x] **Phase 2: Layout Builder** - Service-account layout builder creates and idempotently updates Dashboard + DCA Log tabs; LAYOUT-02 data-region safety fixed (DATA_START_ROW pinned to a fixed literal) — verified, UAT-passed, threat-secure (completed 2026-06-16)
-- [ ] **Phase 3: Data Layer** - Apps Script provider modules (Hyperliquid, Jupiter, Solana RPC) with secrets wired via Secret Manager and PropertiesService
+- [ ] **Phase 3: Data Layer** - Apps Script provider modules (Hyperliquid spot, Jupiter prices + Jupiter Ultra balances) with the Jupiter key and wallet config wired via PropertiesService
 - [ ] **Phase 4: Refresh & Caching** - Time-driven trigger runs batched writes with blob cache and graceful degradation per provider
 - [ ] **Phase 5: PnL & Allocation** - DCA log, cost-basis summary block, unrealized P&L display with color coding, and allocation health zone
 
@@ -72,15 +72,15 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 ### Phase 3: Data Layer
 
-**Goal**: Apps Script provider modules fetch Hyperliquid prices, Jupiter prices, and Solana balances via raw UrlFetchApp, with the Jupiter API key in Secret Manager, wallet config in PropertiesService, and a manual-holdings fallback when the balance flag is off
+**Goal**: Apps Script provider modules fetch Hyperliquid spot prices + balances, Jupiter prices, and Solana balances (Jupiter Ultra) via raw UrlFetchApp, with the Jupiter API key and wallet config in PropertiesService; balances are always fetched (no manual-holdings flag)
 **Depends on**: Phase 2
-**Requirements**: SEC-01, SEC-02, DATA-01, DATA-02, DATA-03, DATA-04
+**Requirements**: SEC-01, SEC-02, DATA-01, DATA-02, DATA-03 (DATA-04 descoped — see CONTEXT D-03)
 **Success Criteria** (what must be TRUE):
 
-  1. Calling the Hyperliquid provider module returns mid prices for all tracked tickers (BTC, HYPE, XAUt) as parsed numbers, with no SDK used
-  2. Calling the Jupiter provider module returns prices for all tracked Solana mints using the `x-api-key` header sourced from Secret Manager, not hardcoded
+  1. Calling the Hyperliquid provider module returns **spot** mid prices for all tracked tickers (`UBTC`, `HYPE`, `XAUT0`) as parsed numbers, with no SDK used
+  2. Calling the Jupiter provider module returns prices for all tracked Solana mints using the `x-api-key` header sourced from `PropertiesService` (`JUP_API_KEY`), not hardcoded
   3. Wallet addresses and runtime config are readable from `PropertiesService` Script Properties and absent from all source files committed to git
-  4. When `FETCH_BALANCES` is false, the system falls back to manually entered holdings without error; when true, Solana RPC balances are fetched via `getTokenAccountsByOwner`
+  4. Solana balances are fetched from Jupiter `ultra/v1/balances` and Hyperliquid spot balances from `spotClearinghouseState`, always (no `FETCH_BALANCES` flag); a provider throws if a tracked asset id is absent from its API response (fail-loud, D-10)
 
 **Plans**: TBD
 

@@ -23,10 +23,10 @@ Requirements for the initial release. Each maps to a roadmap phase.
 
 ### Price & Balance Data
 
-- [ ] **DATA-01**: Apps Script fetches Hyperliquid mid prices (`allMids`) via raw `UrlFetchApp`
-- [ ] **DATA-02**: Apps Script fetches Jupiter prices for the Solana mints via raw `UrlFetchApp` (key in `x-api-key` header)
-- [ ] **DATA-03**: Apps Script fetches on-chain Solana balances via raw RPC `getTokenAccountsByOwner`, gated behind a `FETCH_BALANCES` flag
-- [ ] **DATA-04**: User can enter holdings manually when `FETCH_BALANCES` is off
+- [ ] **DATA-01**: Apps Script fetches Hyperliquid **spot** mid prices for `UBTC`/`HYPE`/`XAUT0` via raw `UrlFetchApp` (spot price path — not perp `allMids`-by-symbol; revised Phase 3 D-05)
+- [ ] **DATA-02**: Apps Script fetches Jupiter prices for the Solana mints via raw `UrlFetchApp` (keyed `api.jup.ag` `price/v3`, `x-api-key` header)
+- [ ] **DATA-03**: Apps Script fetches Solana balances via Jupiter `ultra/v1/balances` (raw `UrlFetchApp`), always fetched (revised Phase 3 D-01 — Solana RPC `getTokenAccountsByOwner` removed)
+- [ ] ~~**DATA-04**~~ **(DESCOPED)**: Manual-holdings mode dropped — balances are always fetched from both venues; no `FETCH_BALANCES` flag (superseded by Phase 3 D-03)
 
 ### Refresh & Caching
 
@@ -49,7 +49,7 @@ Requirements for the initial release. Each maps to a roadmap phase.
 
 ### Security & Secrets
 
-- [ ] **SEC-01**: The Jupiter API key is stored in GCP Secret Manager and read via a `Secrets` module using `ScriptApp.getOAuthToken()`
+- [ ] **SEC-01**: The Jupiter API key is stored in `PropertiesService` Script Property `JUP_API_KEY`, read at call time and absent from committed source (revised Phase 3 D-07 — GCP Secret Manager / `ScriptApp.getOAuthToken()` removed)
 - [ ] **SEC-02**: Wallet addresses and runtime config are stored in `PropertiesService`, not hardcoded
 - [x] **SEC-03**: The service-account key is local-only and gitignored; `.gitignore` covers `*.key.json`, `.clasp.json`, and `apps-script/dist`
 
@@ -91,7 +91,7 @@ Which phases cover which requirements. Populated during roadmap creation.
 | DATA-01 | Phase 3 | Pending |
 | DATA-02 | Phase 3 | Pending |
 | DATA-03 | Phase 3 | Pending |
-| DATA-04 | Phase 3 | Pending |
+| DATA-04 | Phase 3 | Descoped |
 | REFRESH-01 | Phase 4 | Pending |
 | REFRESH-02 | Phase 4 | Pending |
 | REFRESH-03 | Phase 4 | Pending |
@@ -105,10 +105,10 @@ Which phases cover which requirements. Populated during roadmap creation.
 
 **Coverage:**
 
-- v1 requirements: 22 total
+- v1 requirements: 22 total (21 active + 1 descoped: DATA-04)
 - Mapped to phases: 22
 - Unmapped: 0
 
 ---
 *Requirements defined: 2026-06-13*
-*Last updated: 2026-06-13 after roadmap creation*
+*Last updated: 2026-06-16 — Phase 3 discuss-phase deviations (DATA-01/03 revised, DATA-04 descoped, SEC-01 to PropertiesService)*
