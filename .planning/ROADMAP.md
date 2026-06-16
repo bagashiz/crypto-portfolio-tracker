@@ -74,7 +74,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 **Goal**: Apps Script provider modules fetch Hyperliquid spot prices + balances, Jupiter prices, and Solana balances (Jupiter Ultra) via raw UrlFetchApp, with the Jupiter API key and wallet config in PropertiesService; balances are always fetched (no manual-holdings flag)
 **Depends on**: Phase 2
-**Requirements**: SEC-01, SEC-02, DATA-01, DATA-02, DATA-03 (DATA-04 descoped — see CONTEXT D-03)
+**Requirements**: SEC-01, SEC-02, DATA-01, DATA-02, DATA-03 _(manual-holdings requirement descoped — see CONTEXT D-03)_
 **Success Criteria** (what must be TRUE):
 
   1. Calling the Hyperliquid provider module returns **spot** mid prices for all tracked tickers (`UBTC`, `HYPE`, `XAUT0`) as parsed numbers, with no SDK used
