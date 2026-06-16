@@ -28,5 +28,10 @@
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false
   },
-  "include": ["src"]
+  "include": ["src"],
+  // *.test.ts run under `bun test` (Bun runtime, `bun:test` import), NOT the
+  // Apps Script V8 bundle — they are never reachable from entry.ts, so the
+  // bundler tree-shakes them out of dist/Code.js. Excluding them keeps this
+  // type-check scoped to deployed source under google-apps-script typings only.
+  "exclude": ["src/**/*.test.ts"]
 }
