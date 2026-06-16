@@ -16,15 +16,25 @@ export { assets };
 // layout-builder runs on Node, so Bun's auto-.env loading does NOT apply; the value
 // arrives via `node --env-file=.env`. Fail-fast if missing or still the placeholder
 // so a misconfigured run can never address the wrong (or a default) spreadsheet.
+//
+// WR-03: validation is done LAZILY on call, NOT at module-evaluation time. Importing
+// config.js for constants (asset registry, sheet names, DATA_START_ROW) must never throw
+// just because SPREADSHEET_ID is unset — that import-time throw made the entire test suite
+// depend on `import "./testEnv.js"` running before any config.js-importing line, an
+// invariant enforced only by comment and brittle under import reordering. `getSpreadsheetId()`
+// moves the check to the single runtime call site (index.js) that actually needs the id.
 const PLACEHOLDER_SPREADSHEET_ID = "PLACEHOLDER_SPREADSHEET_ID";
-const spreadsheetId = process.env.SPREADSHEET_ID;
-if (!spreadsheetId || spreadsheetId === PLACEHOLDER_SPREADSHEET_ID) {
-  throw new Error(
-    "SPREADSHEET_ID is not set. Create a gitignored .env with " +
-      "SPREADSHEET_ID=<your sheet id> and run via `node --env-file=.env src/index.js ...`."
-  );
+
+export function getSpreadsheetId() {
+  const spreadsheetId = process.env.SPREADSHEET_ID;
+  if (!spreadsheetId || spreadsheetId === PLACEHOLDER_SPREADSHEET_ID) {
+    throw new Error(
+      "SPREADSHEET_ID is not set. Create a gitignored .env with " +
+        "SPREADSHEET_ID=<your sheet id> and run via `node --env-file=.env src/index.js ...`."
+    );
+  }
+  return spreadsheetId;
 }
-export const SPREADSHEET_ID = spreadsheetId;
 
 // Sheet (tab) name constants — UPPER_SNAKE_CASE per CONVENTIONS.md.
 export const DASHBOARD = "Dashboard";

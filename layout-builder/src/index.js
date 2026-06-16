@@ -23,7 +23,7 @@
 import { google } from "googleapis";
 
 import { getSheetsClient } from "./auth.js";
-import { SPREADSHEET_ID, DASHBOARD, DCA_LOG } from "./config.js";
+import { getSpreadsheetId, DASHBOARD, DCA_LOG } from "./config.js";
 import { dashboardBuildRequests, dashboardUpdateRequests } from "./dashboardSheet.js";
 import { dcaLogBuildRequests, dcaLogUpdateRequests } from "./dcaLogSheet.js";
 
@@ -50,9 +50,9 @@ function parseMode(argv) {
 
 // Read the spreadsheet's current tabs and return a Map of title -> sheetId (gridId).
 // Fields are limited to sheets.properties(sheetId,title) to keep the payload minimal.
-async function getExistingTabs(sheets) {
+async function getExistingTabs(sheets, spreadsheetId) {
   const res = await sheets.spreadsheets.get({
-    spreadsheetId: SPREADSHEET_ID,
+    spreadsheetId,
     fields: "sheets.properties(sheetId,title)",
   });
   const tabs = new Map();
@@ -67,9 +67,9 @@ async function getExistingTabs(sheets) {
 
 // Issue a single batched structural stamp. Returns the API replies array so callers can
 // read back per-request results (e.g. addSheet.properties.sheetId from the same call).
-async function batchUpdate(sheets, requests) {
+async function batchUpdate(sheets, spreadsheetId, requests) {
   const res = await sheets.spreadsheets.batchUpdate({
-    spreadsheetId: SPREADSHEET_ID,
+    spreadsheetId,
     requestBody: { requests },
   });
   return res.data.replies ?? [];
@@ -77,8 +77,8 @@ async function batchUpdate(sheets, requests) {
 
 // --- --build (LAYOUT-01 + D-04 guard) -------------------------------------------
 
-async function runBuild(sheets) {
-  const tabs = await getExistingTabs(sheets);
+async function runBuild(sheets, spreadsheetId) {
+  const tabs = await getExistingTabs(sheets, spreadsheetId);
 
   // D-04 hard guard: refuse if either tab already exists. Never delete/recreate.
   const existing = [DASHBOARD, DCA_LOG].filter((title) => tabs.has(title));
@@ -104,7 +104,7 @@ async function runBuild(sheets) {
     ...dashboardBuildRequests(dashboardId),
     ...dcaLogBuildRequests(dcaLogId),
   ];
-  await batchUpdate(sheets, requests);
+  await batchUpdate(sheets, spreadsheetId, requests);
 
   console.log(
     `Built ${DASHBOARD} (gridId ${dashboardId}) and ${DCA_LOG} (gridId ${dcaLogId}).`
@@ -113,8 +113,8 @@ async function runBuild(sheets) {
 
 // --- --update (LAYOUT-02 + D-06: structural-only, never the data region) --------
 
-async function runUpdate(sheets) {
-  const tabs = await getExistingTabs(sheets);
+async function runUpdate(sheets, spreadsheetId) {
+  const tabs = await getExistingTabs(sheets, spreadsheetId);
 
   const dashboardId = tabs.get(DASHBOARD);
   const dcaLogId = tabs.get(DCA_LOG);
@@ -135,7 +135,7 @@ async function runUpdate(sheets) {
     ...dashboardUpdateRequests(dashboardId),
     ...dcaLogUpdateRequests(dcaLogId),
   ];
-  await batchUpdate(sheets, requests);
+  await batchUpdate(sheets, spreadsheetId, requests);
 
   console.log(
     `Re-applied structure to ${DASHBOARD} and ${DCA_LOG} ` +
@@ -149,15 +149,16 @@ async function main() {
   // parseMode throws USAGE on neither/both — surfaced as a non-zero exit below.
   const mode = parseMode(process.argv.slice(2));
 
-  // Importing config.js already fail-fast validates SPREADSHEET_ID (D-02). Reference
-  // google here so the dependency is unambiguously part of this module's contract.
+  // Resolve + fail-fast validate SPREADSHEET_ID at the entry point (WR-03: validation is
+  // now lazy in config.js, so the single runtime caller that needs the id performs it).
   void google;
+  const spreadsheetId = getSpreadsheetId();
 
   const sheets = getSheetsClient();
   if (mode === "build") {
-    await runBuild(sheets);
+    await runBuild(sheets, spreadsheetId);
   } else {
-    await runUpdate(sheets);
+    await runUpdate(sheets, spreadsheetId);
   }
 }
 

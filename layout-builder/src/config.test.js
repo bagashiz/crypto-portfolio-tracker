@@ -11,7 +11,12 @@
 // Imported FIRST so SPREADSHEET_ID exists before config.js is evaluated.
 import "./testEnv.js";
 import { test, expect } from "bun:test";
-import { assets, DATA_START_ROW, MAX_SUMMARY_ROWS } from "./config.js";
+import {
+  assets,
+  DATA_START_ROW,
+  MAX_SUMMARY_ROWS,
+  getSpreadsheetId,
+} from "./config.js";
 
 // The fixed data-region boundary, hard-coded as a literal here. This MUST equal the
 // literal 23 and MUST NOT be recomputed from assets.length — anchoring on the literal
@@ -39,6 +44,33 @@ test("DATA_START_ROW does not move with the registry length (boundary is fixed)"
   // literal and is unrelated to the current count.
   expect(DATA_START_ROW).toBe(23);
   expect(DATA_START_ROW).not.toBe(assets.length + 3);
+});
+
+// WR-03: importing config.js for constants must NOT depend on SPREADSHEET_ID being set,
+// nor on import ordering relative to testEnv.js. Validation is lazy: getSpreadsheetId()
+// returns the value when set, and throws loudly only when unset/placeholder. These tests
+// drive the env var directly (saving/restoring it) so they document the order-independent
+// contract without relying on the testEnv.js side-effect import order.
+test("getSpreadsheetId returns the env value when set", () => {
+  const prev = process.env.SPREADSHEET_ID;
+  process.env.SPREADSHEET_ID = "sheet-abc-123";
+  try {
+    expect(getSpreadsheetId()).toBe("sheet-abc-123");
+  } finally {
+    process.env.SPREADSHEET_ID = prev;
+  }
+});
+
+test("getSpreadsheetId throws loudly when SPREADSHEET_ID is unset or the placeholder", () => {
+  const prev = process.env.SPREADSHEET_ID;
+  try {
+    delete process.env.SPREADSHEET_ID;
+    expect(() => getSpreadsheetId()).toThrow(/SPREADSHEET_ID is not set/);
+    process.env.SPREADSHEET_ID = "PLACEHOLDER_SPREADSHEET_ID";
+    expect(() => getSpreadsheetId()).toThrow(/SPREADSHEET_ID is not set/);
+  } finally {
+    process.env.SPREADSHEET_ID = prev;
+  }
 });
 
 test("MAX_SUMMARY_ROWS reserves room for the current registry with headroom", () => {
