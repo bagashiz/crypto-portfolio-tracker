@@ -23,12 +23,16 @@
  */
 import { hello } from "./Hello";
 import { ASSETS } from "./Config";
+import { setup } from "./Properties";
+import { getHyperliquidData } from "./HyperliquidApi";
+import { getJupiterData } from "./JupiterApi";
 
-// Phase 1: only hello() is live and must be editor-callable (SETUP-02, D-03).
+// hello() and setup() are the editor-callable entry points this phase (D-12).
 // Expose live implementations on a single namespaced global. The post-build
-// footer (scripts/appendGlobals.ts) adds the top-level `function hello()` shim
-// that the editor picker discovers and that delegates here at runtime.
-(globalThis as any).__ENTRY__ = { hello };
+// footer (scripts/appendGlobals.ts) adds top-level `function hello()` /
+// `function setup()` shims that the editor picker discovers and that delegate
+// here at runtime. setup() seeds the three Script Properties (SEC-01/SEC-02).
+(globalThis as any).__ENTRY__ = { hello, setup };
 
 // Keep the bare-name global too — harmless, and preserves the D-03 contract that
 // the function is reachable via globalThis (the editor picker just can't see it
@@ -40,9 +44,18 @@ globalThis.hello = hello;
 // dependency, and makes the registry available to future provider/refresh code.
 globalThis.ASSETS = ASSETS;
 
-// TODO(Phase 3 — providers/refresh): expose the real trigger entry point.
+// Retain the providers in the bundle WITHOUT making them editor entry points
+// (D-12: providers stay INTERNAL). `bun build` tree-shakes anything unreachable
+// from this entry module (Pitfall 5), so reference both on a non-picker namespace
+// (`__PROVIDERS__`, distinct from `__ENTRY__`). They are NOT added to ENTRY_GLOBALS,
+// so appendGlobals.ts emits no top-level shim for them — they ship as bundled
+// functions only. Phase 4's refreshAll() will call them from inside the bundle.
+(globalThis as any).__PROVIDERS__ = { getHyperliquidData, getJupiterData };
+
+// TODO(Phase 4 — refresh): expose the real trigger entry point.
 // Add `refreshAll` to the __ENTRY__ object above AND to the name array in
 // scripts/appendGlobals.ts so the editor picker discovers its top-level shim.
+// refreshAll() will read from __PROVIDERS__ (getHyperliquidData/getJupiterData).
 // (globalThis as any).__ENTRY__.refreshAll = refreshAll;
 // TODO(Phase 4 — triggers): expose install/remove of the time-driven trigger.
 // Same one-line pattern for installTrigger / removeTrigger.
