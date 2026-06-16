@@ -13,6 +13,7 @@
  */
 import { test, expect } from "bun:test";
 import { parseHlSpotMids, parseHlBalances } from "./HyperliquidApi";
+import { parseJupPrices, parseJupBalances } from "./JupiterApi";
 
 // ---------------------------------------------------------------------------
 // Hyperliquid: parseHlSpotMids over a [meta, ctxs] fixture.
@@ -109,4 +110,68 @@ test("Hl parseHlBalances throws when body has no balances array / malformed (D-1
   expect(() => parseHlBalances({ nope: true }, ["UBTC"])).toThrow();
   expect(() => parseHlBalances({ balances: "not-an-array" }, ["UBTC"])).toThrow();
   expect(() => parseHlBalances(null, ["UBTC"])).toThrow();
+});
+
+// ---------------------------------------------------------------------------
+// Jupiter: parseJupPrices over a mint-keyed { "<mint>": { usdPrice } } fixture.
+// ---------------------------------------------------------------------------
+
+const MINT_A = "CqW2pd6dCPG9xKZfAsTovzDsMmAGKJSDBNcwM96ondo"; // IVVon
+const MINT_B = "59obFNBzyTBGowrkif5uK7ojS58vsuWz3ZCvg6tfZAGw"; // PST
+
+function jupPricesFixture() {
+  return {
+    [MINT_A]: { usdPrice: 102.5, decimals: 6 },
+    [MINT_B]: { usdPrice: 1.0, decimals: 6 },
+  };
+}
+
+test("Jup parseJupPrices returns each mint -> finite usdPrice", () => {
+  const out = parseJupPrices(jupPricesFixture(), [MINT_A, MINT_B]);
+  expect(out[MINT_A]).toBe(102.5);
+  expect(out[MINT_B]).toBe(1.0);
+  expect(Number.isFinite(out[MINT_A]!)).toBe(true);
+});
+
+test("Jup parseJupPrices throws when a tracked mint is absent (D-10)", () => {
+  expect(() => parseJupPrices(jupPricesFixture(), [MINT_A, "MISSING_MINT"])).toThrow();
+});
+
+test("Jup parseJupPrices throws when usdPrice is not a number (D-10)", () => {
+  const body = { [MINT_A]: { usdPrice: "not-a-number" as unknown as number } };
+  expect(() => parseJupPrices(body, [MINT_A])).toThrow();
+});
+
+test("Jup parseJupPrices throws when body is not an object / malformed (D-13)", () => {
+  expect(() => parseJupPrices(null, [MINT_A])).toThrow();
+  expect(() => parseJupPrices("nope", [MINT_A])).toThrow();
+  expect(() => parseJupPrices([1, 2, 3], [MINT_A])).toThrow();
+});
+
+// ---------------------------------------------------------------------------
+// Jupiter: parseJupBalances over a mint-keyed { "<mint>": { uiAmount } } fixture.
+// ---------------------------------------------------------------------------
+
+function jupBalancesFixture() {
+  return {
+    SOL: { amount: "0", uiAmount: 0, slot: 1, isFrozen: false }, // native SOL, untracked
+    [MINT_A]: { amount: "12500000", uiAmount: 12.5, slot: 1, isFrozen: false },
+  };
+}
+
+test("Jup parseJupBalances returns each present mint -> uiAmount (not amount)", () => {
+  const out = parseJupBalances(jupBalancesFixture(), [MINT_A]);
+  expect(out[MINT_A]).toBe(12.5); // uiAmount, NOT the raw "12500000" amount
+});
+
+test("Jup parseJupBalances returns 0 (no throw) for a tracked mint absent from body (D-13)", () => {
+  const out = parseJupBalances(jupBalancesFixture(), [MINT_A, MINT_B]);
+  expect(out[MINT_A]).toBe(12.5);
+  expect(out[MINT_B]).toBe(0); // cleanly absent -> legitimate zero holding
+});
+
+test("Jup parseJupBalances throws when body is malformed / not an object (D-13)", () => {
+  expect(() => parseJupBalances(null, [MINT_A])).toThrow();
+  expect(() => parseJupBalances("nope", [MINT_A])).toThrow();
+  expect(() => parseJupBalances([1, 2, 3], [MINT_A])).toThrow();
 });
