@@ -59,6 +59,15 @@ async function getExistingTabs(sheets, spreadsheetId) {
   for (const sheet of res.data.sheets ?? []) {
     const props = sheet.properties ?? {};
     if (typeof props.title === "string") {
+      // WR-04: a title with a non-numeric/missing sheetId is a malformed API response.
+      // Surface it explicitly rather than storing `title -> undefined`, which downstream
+      // `=== undefined` checks would misread as "tab missing" and emit a misleading error.
+      // (A valid gridId of 0 is a number and passes — only undefined/null/non-number fail.)
+      if (typeof props.sheetId !== "number") {
+        throw new Error(
+          `Tab "${props.title}" returned no numeric sheetId (malformed API response).`
+        );
+      }
       tabs.set(props.title, props.sheetId);
     }
   }
