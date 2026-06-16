@@ -1,13 +1,14 @@
 ---
 phase: 02-layout-builder
-reviewed: 2026-06-14T00:00:00Z
+reviewed: 2026-06-16T00:00:00Z
 depth: standard
-files_reviewed: 10
+files_reviewed: 11
 files_reviewed_list:
   - layout-builder/package.json
   - layout-builder/README.md
   - layout-builder/src/auth.js
   - layout-builder/src/config.js
+  - layout-builder/src/config.test.js
   - layout-builder/src/dashboardSheet.js
   - layout-builder/src/dashboardSheet.test.js
   - layout-builder/src/dcaLogSheet.js
@@ -22,245 +23,245 @@ findings:
 status: issues_found
 ---
 
-# Phase 2: Code Review Report
+# Phase 02: Code Review Report
 
-**Reviewed:** 2026-06-14T00:00:00Z
+**Reviewed:** 2026-06-16T00:00:00Z
 **Depth:** standard
-**Files Reviewed:** 10
+**Files Reviewed:** 11
 **Status:** issues_found
 
 ## Summary
 
-Reviewed the layout-builder Node/ESM package: CLI entry, auth, config, the two
-sheet request-builders, and their tests. The code is well-commented and the
-data-loss guard (`--update` never addressing rows at/below `DATA_START_ROW`) is
-genuinely well-defended in `dcaLogSheet.js` and proven by a structural test.
+Reviewed the layout-builder local Node runtime: CLI entry/orchestration (`index.js`),
+auth (`auth.js`), config and asset registry (`config.js`), the two sheet request-builders
+(`dashboardSheet.js`, `dcaLogSheet.js`), and their co-located tests.
 
-However, the central safety guarantee has a hole at the source-of-truth layer:
-`DATA_START_ROW` is derived from `assets.length` at runtime, while the user's
-already-entered transaction data sits at a *fixed* absolute row decided when the
-sheet was first built. Adding or removing an asset later shifts the derived band
-under the existing data region — and `--update` will then write the structural
-band on top of, or leave orphaned, real transaction rows. This is exactly the
-irreversible-data-loss class the phase set out to prevent, so it is a BLOCKER.
+The DCA Log data-safety boundary (LAYOUT-02) — the headline irreversible-data-loss
+guard — is now correctly implemented: `DATA_START_ROW` is a fixed literal (23) with no
+`assets.length` term, every emitted range is provably bounded above the data region, an
+overflow guard fails loudly, and a thorough structural test suite anchors all of this on
+the hard literal. That part is solid. Secrets handling is also correct: the service-account
+key path is local-only and gitignored (`*.key.json`, `service-account.key.json`), no key
+contents are logged, and `getExistingTabs`'s `=== undefined` checks correctly distinguish a
+valid gridId of `0` from a missing tab.
 
-Remaining findings are robustness/quality issues: a `--build` path that can fail
-ungracefully against a brand-new spreadsheet's default tab, missing error-class
-narrowing that can leak the SA key contents into logs, an off-by-one risk in the
-test's data-region assertion that lets a real overwrite slip through, and several
-maintainability concerns.
+However, the same boundary-overflow protection that the DCA Log received was NOT applied
+to the Dashboard sheet. The Dashboard hard-codes Zone B at row 12 while Zone A grows
+downward with `assets.length`, with no guard. Past 9 assets, Zone A's per-asset/TOTAL
+rows silently overwrite Zone B's header and data — the exact class of "registry growth
+corrupts layout" defect LAYOUT-02 was created to prevent, left open on the sibling sheet.
+This is the one Critical finding. The remaining findings are robustness and clarity gaps.
+
+## Narrative Findings (AI reviewer)
 
 ## Critical Issues
 
-### CR-01: `DATA_START_ROW` derived from `assets.length` shifts the protected data band when the registry changes
+### CR-01: Dashboard has no asset-count overflow guard; Zone A collides with Zone B past 9 assets
 
-**File:** `layout-builder/src/config.js:44`, `layout-builder/src/dcaLogSheet.js:36,87-115`
-**Issue:**
-`DATA_START_ROW = assets.length + 3` is recomputed from the *current* registry on
-every run. The DCA Log transaction header (`TX_HEADER_ROW = DATA_START_ROW - 1`)
-and the per-asset summary rows are all positioned from this derived value.
+**File:** `layout-builder/src/dashboardSheet.js:90-110`
 
-On first `--build` with 7 assets, the transaction header lands on row 9 and data
-begins at row 10. The user then enters transactions starting at row 10. If a
-later edit to `assets.json` changes the asset count (add an 8th asset, or remove
-one), `DATA_START_ROW` shifts to 11 (or 9). Running `--update`:
+**Issue:** Zone B's header is hard-coded at row 12 (`ZONE_B_HEADER_ROW = 12`), but Zone A
+grows downward with the registry:
 
-- **Add an asset (count 7 -> 8):** the new summary row is written at row 8, the
-  transaction header is re-stamped at row 10 — which is the **first existing
-  data row**. `--update` overwrites a real transaction with header text.
-- **Remove an asset (count 7 -> 6):** the band shrinks; the header is written at
-  row 8, leaving the user's old header text and the now-misaligned first data
-  rows stranded above the new data boundary.
-
-The much-advertised guard ("`--update` never touches rows at/below
-`DATA_START_ROW`") is only true *for a fixed DATA_START_ROW*. Because the value
-floats with `assets.length`, the guard's own boundary moves into live data. The
-test in `dcaLogSheet.test.js` cannot catch this — it imports the same derived
-`DATA_START_ROW`, so the assertion moves in lockstep with the band and stays
-green while real rows get clobbered.
-
-**Fix:**
-Pin the data boundary to an immutable value once the sheet exists, independent of
-`assets.length`. Options, in order of safety:
-
-```js
-// config.js — make the band boundary a fixed constant, not derived.
-// The summary block must be sized for the MAX supported assets, reserving a
-// fixed gap so the transaction header/data region never moves.
-export const MAX_SUMMARY_ROWS = 16;          // fixed capacity, > any realistic registry
-export const SUMMARY_HEADER_ROW = 1;
-export const TX_HEADER_ROW = SUMMARY_HEADER_ROW + MAX_SUMMARY_ROWS + 1; // fixed
-export const DATA_START_ROW = TX_HEADER_ROW + 1;                        // fixed forever
+```
+zoneATotalRow = ZONE_A_HEADER_ROW + 1 + assets.length   // = 2 + assets.length
 ```
 
-Then summary rows beyond `assets.length` are simply left blank, and `DATA_START_ROW`
-never moves regardless of registry edits. Add a test that asserts
-`DATA_START_ROW` equals a hard-coded literal (not a value derived from
-`assets.length`) so a future registry change that would move the boundary fails
-the suite loudly. Alternatively, read the persisted boundary back from the live
-sheet and refuse `--update` if the on-sheet header row no longer matches the
-computed one.
+Zone A's per-asset label rows occupy 1-based rows `2 .. (1 + assets.length)` and the TOTAL
+row lands at `2 + assets.length`. For no overlap with Zone B's header at row 12 we need
+`2 + assets.length < 12`, i.e. `assets.length <= 9`. At `assets.length === 10` the Zone A
+TOTAL row is stamped at row 12 — directly onto the Zone B header — and at 11+ assets the
+Zone A per-asset labels overwrite Zone B header and rows. The number-format `repeatCell`
+ranges (lines 99-101) also extend into Zone B's band.
+
+Unlike `dcaLogSheet.js`, which fails loudly via the `MAX_SUMMARY_ROWS` guard
+(`dcaLogSheet.js:106-112`), `dashboardSheet.js` has NO equivalent check. A one-line
+`assets.json` edit growing the registry past 9 entries silently corrupts the Dashboard
+layout (label rows overwriting each other) with no error — the same "registry growth moves
+a fixed boundary onto live content" failure class LAYOUT-02 exists to prevent, left
+unguarded on the Dashboard. The shared `MAX_SUMMARY_ROWS = 20` reservation makes this
+worse: the DCA Log silently allows up to 20 assets, so an operator who raises the registry
+to (say) 15 assets passes the DCA Log guard but silently corrupts the Dashboard.
+
+**Fix:** Either derive Zone B's start row from `assets.length` (so it floats below Zone A
+plus a one-row gap), or — to keep zones at fixed positions — add an explicit reservation
+constant and a loud guard mirroring the DCA Log:
+
+```js
+// In config.js (shared reservation), or local to dashboardSheet.js:
+export const MAX_ZONE_A_ASSET_ROWS = 9; // Zone B header pinned at row 12; 1 blank gap row.
+
+// In structuralRequests(), before emitting any request:
+if (assets.length > MAX_ZONE_A_ASSET_ROWS) {
+  throw new Error(
+    `assets.length (${assets.length}) exceeds MAX_ZONE_A_ASSET_ROWS ` +
+      `(${MAX_ZONE_A_ASSET_ROWS}); Zone A would overwrite Zone B (header row ` +
+      `${ZONE_B_HEADER_ROW}). Move ZONE_B_HEADER_ROW down or reduce the registry.`
+  );
+}
+```
+
+Preferred long-term fix: compute `ZONE_B_HEADER_ROW = zoneATotalRow + 2` so the two zones
+can never collide regardless of registry size, and drop the magic 12.
 
 ## Warnings
 
-### WR-01: `--build` against a fresh spreadsheet leaves the default tab and can collide on re-run
+### WR-01: `structuralRequests` accepts no asset-list override, so the Dashboard overflow path is untestable
 
-**File:** `layout-builder/src/index.js:78-117`
-**Issue:**
-A newly created Google spreadsheet always contains a default tab (commonly
-`Sheet1`). `runBuild` only checks for `Dashboard`/`DCA Log` and adds two new
-tabs, leaving the stray default tab behind. More importantly, the D-04 guard only
-refuses when `Dashboard` or `DCA Log` already exist; it does not detect a partial
-prior run. If the first `batchUpdate` (the two `addSheet`s) succeeds but the
-second (structural stamp) fails — network blip, quota — a re-run of `--build`
-will now correctly refuse (tabs exist), but the operator is left with two
-empty, unstamped tabs and the only path forward is `--update`. That recovery
-path is undocumented for this failure mode.
+**File:** `layout-builder/src/dashboardSheet.js:82,120-128`
 
-**Fix:**
-Document the partial-failure recovery ("if `--build` fails after tab creation,
-re-run with `--update`"), and consider deleting/ignoring the default tab or at
-least logging its presence. At minimum add a comment in `runBuild` noting that
-the two-batch sequence is not atomic.
+**Issue:** `dcaLogSheet.js` deliberately threads an optional `assetList = assets` parameter
+through `bandRequests` / `dcaLogBuildRequests` / `dcaLogUpdateRequests` (lines 102, 154,
+161) specifically so the overflow guard and boundary-invariance can be unit-tested without
+mutating the shared import (`dcaLogSheet.test.js:120-136`). The Dashboard builders
+(`dashboardBuildRequests` / `dashboardUpdateRequests`) hard-bind to the imported `assets`
+with no override. Even once CR-01's guard is added, there is no way to drive it from a test,
+and there is currently no test asserting Zone A and Zone B do not overlap at any asset
+count. The asymmetry means the higher-stakes-looking DCA Log is well covered while the
+Dashboard's collision risk is invisible to the suite.
 
-### WR-02: Top-level error handler can leak service-account key contents into logs
+**Fix:** Mirror the DCA Log signature: `structuralRequests(sheetId, assetList = assets)`
+and thread `assetList` through both exported builders, then add a test that asserts (a) the
+guard throws past the limit and (b) `zoneATotalRow < ZONE_B_HEADER_ROW` for a max-size
+registry.
 
-**File:** `layout-builder/src/index.js:169-180`, `layout-builder/src/auth.js:8-11`
-**Issue:**
-`auth.js` explicitly promises the key contents "must not appear in any error
-message." But `getSheetsClient()` uses `keyFile`, so key parsing happens lazily
-inside googleapis during the first API call, and any error there is caught by the
-generic handler at `index.js:169` which prints `err.message` / `String(err)`.
-googleapis/google-auth-library errors on malformed key JSON can include fragments
-of the offending input. `String(err)` on a non-Error throw could serialize an
-object containing the loaded key. The handler makes no attempt to scrub or
-narrow by error type, so the security promise is not actually enforced in code.
+### WR-02: `--build` tab creation and structural stamp are not atomic; a partial failure leaves orphan empty tabs
 
-**Fix:**
-Narrow the printed surface and never `String(err)` an arbitrary object:
+**File:** `layout-builder/src/index.js:91-112`
 
-```js
-main().catch((err) => {
-  const message = err instanceof Error ? err.message : "Unexpected error.";
-  // Defensive: never echo anything that might embed key material.
-  console.error(message.replace(/-----BEGIN[\s\S]*?-----END[^-]*-----/g, "[redacted-key]"));
-  // ...actionable hint...
-  process.exit(1);
-});
-```
+**Issue:** `runBuild` issues two separate `batchUpdate` calls: first to `addSheet` both
+tabs (lines 91-94), then to stamp structure (line 112). If the process dies or the second
+call fails (network error, 5xx, transient quota) after the tabs are created but before the
+structural stamp, the `Dashboard` and `DCA Log` tabs now exist but are empty/unstructured.
+Re-running `--build` then hits the D-04 guard (`index.js:82-88`) and refuses, and `--update`
+will re-stamp structure onto those empty tabs — which happens to recover here, but only by
+luck. There is no transactional rollback and no message telling the operator that the safe
+recovery path after a half-built run is `--update`, not `--build`.
 
-### WR-03: Data-region test off-by-one allows an overwrite of the first data row to pass
+**Fix:** Either (a) combine `addSheet` and the structural requests into a single
+`batchUpdate` (Sheets `batchUpdate` is atomic — all requests apply or none do), using the
+`addSheet` reply's `replies[].addSheet.properties.sheetId` to obtain the new gridIds in the
+same call, eliminating the second round-trip and the orphan-tab window entirely; or (b) if
+the two-call shape is kept, catch a stamp failure and surface explicit guidance: "tabs were
+created but not structured — run `--update` to finish."
 
-**File:** `layout-builder/src/dcaLogSheet.test.js:64`
-**Issue:**
-The critical assertion uses `expect(range.endRowIndex).toBeLessThanOrEqual(DATA_START_ROW_0BASED)`.
-`endRowIndex` is exclusive, and `DATA_START_ROW_0BASED` is the 0-based index of
-the first data row. A range with `endRowIndex === DATA_START_ROW_0BASED` stops
-exactly before the data — that is correct and should pass. But the `<=`
-combined with the exclusive semantics means a range whose *last written row* is
-`DATA_START_ROW_0BASED` (i.e. `endRowIndex === DATA_START_ROW_0BASED + 1`) would
-fail — good — yet the start-side guard at line 67 uses
-`toBeLessThan(DATA_START_ROW_0BASED)`, which is correct, but `extractRanges` does
-not normalize `updateCells` requests that carry both a `range` AND `rows`, nor
-`repeatCell` with an open-ended (missing `endRowIndex`) range from a future edit.
-The net effect: the suite proves the *current* request set is safe, but is brittle
-against the very Phase-5 extensions the comments anticipate. Given CR-01, this
-test also cannot detect the floating-boundary class of overwrite at all.
+### WR-03: Build-time fail-fast in `config.js` runs on import, breaking any test that imports it without `testEnv.js` first
 
-**Fix:**
-Assert `DATA_START_ROW` against a hard literal independent of `assets.length`
-(see CR-01), and make `extractRanges` fail closed on any range it does not
-recognize (push a sentinel range with `endRowIndex: Infinity` for unknown request
-shapes so the assertion catches them) rather than silently skipping them.
+**File:** `layout-builder/src/config.js:20-27`
 
-### WR-04: `getExistingTabs` silently drops tabs whose `sheetId` is missing or whose title is non-string
+**Issue:** `config.js` throws at module-evaluation time if `SPREADSHEET_ID` is unset
+(lines 21-26). Every module under test transitively imports `config.js`, so the entire test
+suite depends on the side-effect import `./testEnv.js` running *before* `config.js` in ES
+module order. This works today, but it is fragile: any new test file (or any reordering of
+imports, e.g. an auto-formatter or an `import`-sorter that alphabetizes) that places a
+`config.js`-importing line above `import "./testEnv.js"` will throw at collection time with
+a confusing "SPREADSHEET_ID is not set" error unrelated to the test's intent. The contract
+is enforced only by comment convention (`testEnv.js:3-7`), not by tooling.
 
-**File:** `layout-builder/src/index.js:58-65`
-**Issue:**
-`tabs.set(props.title, props.sheetId)` runs whenever `props.title` is a string,
-but does not validate that `props.sheetId` is a number. If the API returns a tab
-with a string title but (for any reason) an undefined `sheetId`, it is stored as
-`undefined` and later `created.get(DASHBOARD)` returns `undefined`, which the code
-interprets as "tab not created." For `runUpdate`, an undefined stored value would
-be treated as "missing tab." These are silent mis-classifications rather than
-clear errors.
+**Fix:** Make the dependency explicit and order-independent. Options: (a) export a
+`getSpreadsheetId()` function that validates on call rather than throwing at import time, so
+modules importing `config.js` for constants don't trip the env check; (b) read a default in
+a test/NODE_ENV-aware way; or at minimum (c) add a test that documents and asserts the
+import-ordering invariant so an accidental reorder fails loudly with a clear message.
 
-**Fix:**
-Only register tabs with a numeric `sheetId`:
+### WR-04: `getExistingTabs` stores `sheetId` without validating it is numeric, masking malformed API responses
+
+**File:** `layout-builder/src/index.js:59-65`
+
+**Issue:** `getExistingTabs` only gates on `typeof props.title === "string"`, then stores
+`props.sheetId` unconditionally. If the API returns a sheet with a title but a
+missing/undefined `sheetId` (malformed or partial response), the map stores
+`title -> undefined`. Downstream, `runBuild`/`runUpdate` test `dashboardId === undefined`
+(lines 100, 124-128) and would treat a present-but-malformed tab as "missing," producing a
+misleading "tab not found / creation did not produce gridIds" error rather than a clear
+"unexpected API response" diagnostic. (Note: the title-based D-04 existence guard at
+`runBuild` line 82 uses `tabs.has(title)` and is unaffected; only gridId resolution is.)
+
+**Fix:** Only record entries with a valid numeric id, and treat a title-without-id as an
+explicit error:
 
 ```js
-if (typeof props.title === "string" && typeof props.sheetId === "number") {
+if (typeof props.title === "string") {
+  if (typeof props.sheetId !== "number") {
+    throw new Error(`Tab "${props.title}" returned no numeric sheetId (malformed API response).`);
+  }
   tabs.set(props.title, props.sheetId);
 }
 ```
 
-### WR-05: `googleapis: "latest"` pins nothing — non-reproducible, supply-chain exposure
+### WR-05: `void google;` is dead code masquerading as a contract assertion; the import is unused
 
-**File:** `layout-builder/package.json:10`
-**Issue:**
-`"googleapis": "latest"` resolves to whatever is newest at install time. This
-makes builds non-reproducible and silently pulls in new transitive code on every
-fresh install — a supply-chain risk for a tool that authenticates with a
-service-account key and writes to a live spreadsheet. There is no lockfile shown
-in `layout-builder/` (the root `bun.lock` does not cover this isolated package's
-install when run via `node`/npm).
+**File:** `layout-builder/src/index.js:23,158-159`
 
-**Fix:**
-Pin a concrete version range (e.g. `"googleapis": "^144.0.0"`) and commit a
-lockfile for this package so installs are reproducible.
+**Issue:** `google` is imported (line 23) and then referenced only via `void google;`
+(line 159) with a comment claiming it makes the dependency "unambiguously part of this
+module's contract." `google` is never actually used in this file — `getSheetsClient()`
+(from `auth.js`) is the only thing that touches `googleapis`. The `void google;` statement
+is a no-op that exists solely to keep an otherwise-unused import. This is dead code; it adds
+nothing to the runtime contract (the real dependency edge is `auth.js → googleapis`) and a
+future reader/linter will be misled into thinking `google` is used here.
+
+**Fix:** Remove both the unused `import { google } from "googleapis";` and the
+`void google;` line. The `googleapis` dependency is already exercised via `auth.js`.
 
 ## Info
 
-### IN-01: `void google;` is a code smell standing in for a real dependency use
+### IN-01: `numberFormatRequest` mixed 1-based/exclusive convention invites off-by-one column/row errors
 
-**File:** `layout-builder/src/index.js:159`
-**Issue:**
-`void google;` exists only to "make the dependency unambiguously part of this
-module's contract." `google` is already imported and genuinely used transitively
-via `auth.js`; the top-level `import { google } from "googleapis"` here is unused
-in this file and the `void` is a workaround for that. It is dead code dressed up
-as intent.
+**File:** `layout-builder/src/dashboardSheet.js:54-68`, `layout-builder/src/dcaLogSheet.js:68-82`
 
-**Fix:** Remove both the unused `import { google } from "googleapis"` (line 23)
-and the `void google;` statement. `getSheetsClient` already owns that dependency.
+**Issue:** `numberFormatRequest(..., startCol, endCol, ...)` treats `startCol` as 1-based
+inclusive (`startColumnIndex: startCol - 1`) but `endCol` as already-exclusive
+(`endColumnIndex: endCol`). The comment "exclusive, already 1-based-inclusive -> exclusive"
+describes this, but the mixed convention (one arg adjusted, the other not) is a classic
+off-by-one trap. The current call sites are correct (e.g. cols C-D passed as `3, 4`), but
+the asymmetry is fragile under future edits. The same applies to `startRow` (adjusted) vs
+`endRow` (passed through).
 
-### IN-02: Duplicated request-helper definitions across the two sheet builders
+**Fix:** Use a uniform convention — pass both ends as 1-based inclusive and convert both
+inside the helper — or rename params to `endColExclusive` / `endRowExclusive` to make the
+contract self-documenting.
 
-**File:** `layout-builder/src/dashboardSheet.js:33-78`, `layout-builder/src/dcaLogSheet.js:44-81`
-**Issue:**
-`stringCell`, `labelRowRequest`, `numberFormatRequest`, and the freeze-rows
-helper are copy-pasted between `dashboardSheet.js` and `dcaLogSheet.js` with
-near-identical bodies. Divergence risk: a fix to the 1-based -> 0-based
-conversion in one file will not propagate to the other.
+### IN-02: Header comment describes a layout (Zone A "rows 1-10", TOTAL at row 10) that does not match the 7-asset reality (TOTAL at row 9)
 
-**Fix:** Extract the shared request-builders into a `src/requests.js` module and
-import them in both sheet definitions.
+**File:** `layout-builder/src/dashboardSheet.js:8-9`
 
-### IN-03: `CURRENCY_FORMAT` constant duplicated across modules
+**Issue:** The header comment states "Zone A — Live Holdings: rows 1-10 (header row 1,
+per-asset rows, TOTAL row 10)". With the current 7-asset registry the TOTAL row is computed
+at row 9 (`2 + 7`), not 10, and Zone A occupies rows 1-9. The comment encodes an assumed
+8-asset layout that drifts from both the code and the data — this drift is part of what
+makes CR-01 easy to miss.
 
-**File:** `layout-builder/src/dashboardSheet.js:29`, `layout-builder/src/dcaLogSheet.js:39`
-**Issue:** The same `{ type: "CURRENCY", pattern: "$#,##0.00" }` literal is
-defined in two files. Same drift risk as IN-02.
+**Fix:** Describe Zone A as floating with `assets.length` (rows `1 .. 2 + assets.length`)
+and Zone B's start as fixed/derived, so the comment matches the computed positions.
 
-**Fix:** Move number-format constants into a shared module alongside the
-extracted helpers.
+### IN-03: Magic row literal `12` for Zone B with no named relationship to Zone A
 
-### IN-04: README documents `npm run build`/`update` but project convention is Bun
+**File:** `layout-builder/src/dashboardSheet.js:24`
 
-**File:** `layout-builder/README.md:45-48`, `layout-builder/package.json:6-7`
-**Issue:** Project CLAUDE.md mandates Bun over npm/Node tooling, yet the scripts
-and README invoke `node --env-file=.env` and `npm run ...`. This is intentional
-for the layout-builder (it is explicitly the Node runtime, per the two-runtime
-boundary), but the `npm run` phrasing in the README is gratuitous and conflicts
-with the stated convention. The `node --env-file` part is correct and required
-(Bun auto-loads `.env`, Node does not).
+**Issue:** `ZONE_B_HEADER_ROW = 12` is a magic number whose safety depends entirely on Zone
+A staying under it (see CR-01). Nothing in the code expresses the invariant "Zone B must
+start below Zone A's TOTAL row." A reader cannot tell why 12 (vs 11 or 13) is correct.
 
-**Fix:** Keep `node --env-file=.env` (required), but invoke the scripts directly
-or note clearly that this package is the deliberate Node exception so readers do
-not "correct" it to Bun.
+**Fix:** Derive it (`const ZONE_B_HEADER_ROW = zoneATotalRow + 2;`) or, if it must stay
+fixed, add a comment and the CR-01 guard tying it to `MAX_ZONE_A_ASSET_ROWS`.
+
+### IN-04: `package.json` pins `googleapis` to `latest`, making builds non-reproducible
+
+**File:** `layout-builder/package.json:9-11`
+
+**Issue:** `"googleapis": "latest"` resolves to whatever the newest published version is at
+install time, so two installs days apart can pull different majors with breaking API
+changes. For a local-only tool that mutates a spreadsheet holding irreversible transaction
+data, a surprise dependency bump in the Sheets client is an avoidable risk. (Project CLAUDE.md
+mandates Bun, but this sub-package is explicitly Node-runtime per the two-runtime boundary,
+so npm semantics apply here.)
+
+**Fix:** Pin a concrete caret range (e.g. `"googleapis": "^144.0.0"`, or the version
+currently resolved) and commit a lockfile for the sub-package so installs are reproducible.
 
 ---
 
-_Reviewed: 2026-06-14T00:00:00Z_
+_Reviewed: 2026-06-16T00:00:00Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
