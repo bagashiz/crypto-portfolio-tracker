@@ -86,7 +86,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 **Wave 1**
 
-- [ ] 03-01-PLAN.md — Config foundation: fill assets.json real mints/HL spot tickers (D-04/D-05), add external_request OAuth scope, Properties.ts fail-loud getScriptProp + placeholder setup() (SEC-01/SEC-02)
+- [x] 03-01-PLAN.md — Config foundation: fill assets.json real mints/HL spot tickers (D-04/D-05), add external_request OAuth scope, Properties.ts fail-loud getScriptProp + placeholder setup() (SEC-01/SEC-02)
 
 **Wave 2** *(depends on 03-01)*
 
@@ -135,6 +135,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 |-------|----------------|--------|-----------|
 | 1. Foundation | 2/2 | Complete    | 2026-06-14 |
 | 2. Layout Builder | 3/3 | Complete    | 2026-06-16 |
-| 3. Data Layer | 0/3 | Not started | - |
+| 3. Data Layer | 1/3 | In Progress|  |
 | 4. Refresh & Caching | 0/TBD | Not started | - |
 | 5. PnL & Allocation | 0/TBD | Not started | - |
