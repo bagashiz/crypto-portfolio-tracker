@@ -102,6 +102,10 @@ None - no external service configuration required.
 - Phase 5 open-ended `A{DATA_START_ROW}:A` SUMIF ranges (D-07) are compatible with — and improved by — the fixed, generous boundary.
 - No new blockers introduced. Pre-existing Phase 3 blockers (Solana mint addresses, XAUt ticker, RPC endpoint) remain unchanged and out of scope for this plan.
 
+## Self-Check: PASSED
+
+All claimed files exist on disk and all task/summary commits are present in git history; working tree clean.
+
 ---
 *Phase: 02-layout-builder*
 *Completed: 2026-06-16*
