@@ -30,15 +30,35 @@ export const SPREADSHEET_ID = spreadsheetId;
 export const DASHBOARD = "Dashboard";
 export const DCA_LOG = "DCA Log";
 
-// DCA Log transaction data-region boundary (1-based row index).
-// The DCA Log top-of-data band is laid out as (D-05):
-//   row 1            : summary block title/header
-//   rows 2..(1+N)    : one per-asset summary row (N = assets.length)
-//   row (2+N)        : transaction column header row (Date..Notes, cols A-I)
-//   row (3+N) onward : transaction DATA rows (user-entered, grow unbounded)
+// DCA Log transaction data-region boundary (1-based row index) — FIXED at build time.
+//
+// Fixed row map (NEVER moves when the asset registry grows or shrinks):
+//   row 1                       : summary block title/header
+//   rows 2..(1 + MAX_SUMMARY_ROWS)   : reserved per-asset summary block (rows 2-21)
+//                                      — filled top-down up to assets.length; the rest
+//                                        stay blank (label/format-only, no formulas, D-08)
+//   row (2 + MAX_SUMMARY_ROWS)       : transaction column header row (row 22, Date..Notes A-I)
+//   row (3 + MAX_SUMMARY_ROWS) onward: transaction DATA rows (row 23+, user-entered, unbounded)
+//
 // DATA_START_ROW is that first data row. It is the irreversible-data-loss boundary
 // (D-06/D-07): `--update` must NEVER write to or clear any row at or below this row.
-// Fixed value derived from the current registry (7 assets -> header on row 9,
-// data starts on row 10). Computed from assets.length so it stays consistent if the
-// registry grows.
-export const DATA_START_ROW = assets.length + 3;
+//
+// WHY FIXED, NOT DERIVED FROM assets.length (LAYOUT-02 gap closure):
+//   The previous `assets.length + 3` FLOATED the boundary with the registry. The
+//   documented one-line CONFIG-01 asset add followed by `--update` then re-stamped the
+//   transaction header directly onto the first existing DCA data row — overwriting real
+//   hand-entered transactions with header text. That is exactly the irreversible
+//   data-loss class LAYOUT-02 exists to prevent. Pinning the boundary to a fixed literal
+//   (computed only from the MAX_SUMMARY_ROWS reservation and fixed header offsets, with
+//   NO assets.length term) means a registry edit can never move the header onto a data row.
+//   Phase 5's open-ended A{DATA_START_ROW}:A SUMIF ranges (D-07) are compatible with — and
+//   improved by — a fixed, generous boundary.
+
+// Reserved maximum number of per-asset summary rows. assets.length must never exceed
+// this (the builders fail loudly if it does, rather than silently shifting the boundary).
+// 20 covers the current 7 assets plus comfortable growth headroom.
+export const MAX_SUMMARY_ROWS = 20;
+
+// First transaction DATA row = summary header (1) + reserved block (MAX_SUMMARY_ROWS)
+// + transaction header (1) + 1. Equals MAX_SUMMARY_ROWS + 3 = 23. NO assets.length term.
+export const DATA_START_ROW = MAX_SUMMARY_ROWS + 3;
