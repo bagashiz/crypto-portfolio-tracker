@@ -80,9 +80,21 @@ Decimal phases appear between their surrounding integers in numeric order.
   1. Calling the Hyperliquid provider module returns **spot** mid prices for all tracked tickers (`UBTC`, `HYPE`, `XAUT0`) as parsed numbers, with no SDK used
   2. Calling the Jupiter provider module returns prices for all tracked Solana mints using the `x-api-key` header sourced from `PropertiesService` (`JUP_API_KEY`), not hardcoded
   3. Wallet addresses and runtime config are readable from `PropertiesService` Script Properties and absent from all source files committed to git
-  4. Solana balances are fetched from Jupiter `ultra/v1/balances` and Hyperliquid spot balances from `spotClearinghouseState`, always (no `FETCH_BALANCES` flag); a provider throws if a tracked asset id is absent from its API response (fail-loud, D-10)
+  4. Solana balances are fetched from Jupiter `ultra/v1/balances` and Hyperliquid spot balances from `spotClearinghouseState`, always (no `FETCH_BALANCES` flag); a provider throws if a tracked asset id is absent from its API response (fail-loud, D-10/D-13)
 
-**Plans**: TBD
+**Plans**: 3 plans
+
+**Wave 1**
+
+- [ ] 03-01-PLAN.md — Config foundation: fill assets.json real mints/HL spot tickers (D-04/D-05), add external_request OAuth scope, Properties.ts fail-loud getScriptProp + placeholder setup() (SEC-01/SEC-02)
+
+**Wave 2** *(depends on 03-01)*
+
+- [ ] 03-02-PLAN.md — Providers: HyperliquidApi (spot mids via spotMetaAndAssetCtxs + balances) and JupiterApi (price/v3 + ultra/v1/balances) with pure tested parsers enforcing D-09/D-10/D-13 (DATA-01/02/03)
+
+**Wave 3** *(depends on 03-01, 03-02)*
+
+- [ ] 03-03-PLAN.md — Wiring + live verify: retain providers in the bundle, expose setup() editor global (D-12), build/grep verify, human-verify checkpoint for live Script-Properties setup + provider smoke test + no-secret-committed gate
 
 ### Phase 4: Refresh & Caching
 
@@ -123,6 +135,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 |-------|----------------|--------|-----------|
 | 1. Foundation | 2/2 | Complete    | 2026-06-14 |
 | 2. Layout Builder | 3/3 | Complete    | 2026-06-16 |
-| 3. Data Layer | 0/TBD | Not started | - |
+| 3. Data Layer | 0/3 | Not started | - |
 | 4. Refresh & Caching | 0/TBD | Not started | - |
 | 5. PnL & Allocation | 0/TBD | Not started | - |
