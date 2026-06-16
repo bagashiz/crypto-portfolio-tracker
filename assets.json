@@ -2,7 +2,7 @@
   {
     "id": "BTC",
     "venue": "hyperliquid",
-    "ticker": "BTC",
+    "ticker": "UBTC",
     "target": 0.4,
     "risk": 2,
     "apy": 0
@@ -18,7 +18,7 @@
   {
     "id": "XAUt",
     "venue": "hyperliquid",
-    "ticker": "PLACEHOLDER_TICKER_phase3",
+    "ticker": "XAUT0",
     "target": 0.1,
     "risk": 1,
     "apy": 0
@@ -26,7 +26,7 @@
   {
     "id": "IVVon",
     "venue": "solana",
-    "mint": "PLACEHOLDER_MINT_phase3",
+    "mint": "CqW2pd6dCPG9xKZfAsTovzDsMmAGKJSDBNcwM96ondo",
     "target": 0.1,
     "risk": 2,
     "apy": 5
@@ -34,7 +34,7 @@
   {
     "id": "PST",
     "venue": "solana",
-    "mint": "PLACEHOLDER_MINT_phase3",
+    "mint": "59obFNBzyTBGowrkif5uK7ojS58vsuWz3ZCvg6tfZAGw",
     "target": 0.05,
     "risk": 3,
     "apy": 8
@@ -42,7 +42,7 @@
   {
     "id": "ONyc",
     "venue": "solana",
-    "mint": "PLACEHOLDER_MINT_phase3",
+    "mint": "5Y8NV33Vv7WbnLfq3zBcKSdYPrk7g2KoiQoe7M2tcxp5",
     "target": 0.05,
     "risk": 3,
     "apy": 7
@@ -50,7 +50,7 @@
   {
     "id": "USDy",
     "venue": "solana",
-    "mint": "PLACEHOLDER_MINT_phase3",
+    "mint": "A1KLoBrKBde8Ty9qtNQUtq3C2ortoC3u7twggz7sEto6",
     "target": 0.1,
     "risk": 1,
     "apy": 5
