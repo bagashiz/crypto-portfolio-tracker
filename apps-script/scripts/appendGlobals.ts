@@ -20,8 +20,12 @@
  * committed, reproducible mechanism.
  */
 
-/** The entry-point globals that must be statically discoverable in the editor. */
-const ENTRY_GLOBALS = ["hello"] as const;
+/**
+ * The entry-point globals that must be statically discoverable in the editor.
+ * Providers (getHyperliquidData/getJupiterData) are intentionally NOT listed —
+ * they are internal (D-12), retained in the bundle but not editor-callable.
+ */
+const ENTRY_GLOBALS = ["hello", "setup"] as const;
 
 const OUT_PATH = new URL("../dist/Code.js", import.meta.url);
 
