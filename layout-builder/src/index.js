@@ -65,12 +65,14 @@ async function getExistingTabs(sheets) {
   return tabs;
 }
 
-// Issue a single batched structural stamp.
+// Issue a single batched structural stamp. Returns the API replies array so callers can
+// read back per-request results (e.g. addSheet.properties.sheetId from the same call).
 async function batchUpdate(sheets, requests) {
-  await sheets.spreadsheets.batchUpdate({
+  const res = await sheets.spreadsheets.batchUpdate({
     spreadsheetId: SPREADSHEET_ID,
     requestBody: { requests },
   });
+  return res.data.replies ?? [];
 }
 
 // --- --build (LAYOUT-01 + D-04 guard) -------------------------------------------
@@ -87,25 +89,18 @@ async function runBuild(sheets) {
     );
   }
 
-  // Create both tabs first (gridIds are only known after creation), then stamp.
-  await batchUpdate(sheets, [
-    { addSheet: { properties: { title: DASHBOARD } } },
-    { addSheet: { properties: { title: DCA_LOG } } },
-  ]);
-
-  // Resolve the freshly-created gridIds.
-  const created = await getExistingTabs(sheets);
-  const dashboardId = created.get(DASHBOARD);
-  const dcaLogId = created.get(DCA_LOG);
-  if (dashboardId === undefined || dcaLogId === undefined) {
-    throw new Error(
-      "Tab creation did not produce the expected gridIds for " +
-        `${DASHBOARD} / ${DCA_LOG} — aborting before structural stamp.`
-    );
-  }
-
-  // One batched structural stamp from the Plan 01 builders.
+  // WR-02: create the tabs AND stamp their structure in ONE atomic batchUpdate (Sheets
+  // batchUpdate applies all requests or none). We assign explicit gridIds in the addSheet
+  // requests so the structural builders can reference them in the same payload — there is
+  // no second round-trip, so no window where empty/unstructured orphan tabs can survive a
+  // partial failure. The chosen ids are unused-by-construction (this run just refused if
+  // either tab existed); a collision would surface as a loud addSheet error, not silent
+  // corruption.
+  const dashboardId = 1;
+  const dcaLogId = 2;
   const requests = [
+    { addSheet: { properties: { sheetId: dashboardId, title: DASHBOARD } } },
+    { addSheet: { properties: { sheetId: dcaLogId, title: DCA_LOG } } },
     ...dashboardBuildRequests(dashboardId),
     ...dcaLogBuildRequests(dcaLogId),
   ];
