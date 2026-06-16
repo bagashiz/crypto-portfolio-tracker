@@ -24,6 +24,13 @@ const ZONE_A_HEADERS = ["Asset", "Qty", "Price", "Value", "Target %", "Risk", "A
 const ZONE_B_HEADER_ROW = 12; // 1-based
 const ZONE_B_HEADERS = ["Asset", "Target %", "Actual %", "Drift", "Risk", "APY %", "Monthly Yield"];
 
+// Maximum Zone A per-asset rows before Zone A's TOTAL row would collide with Zone B's
+// pinned header. Zone A occupies rows 1..(2 + assets.length); the TOTAL row lands at
+// (2 + assets.length). For no overlap with ZONE_B_HEADER_ROW (12) and a 1-row blank gap
+// (row 11) we need (2 + assets.length) < 12, i.e. assets.length <= 9. Mirrors the DCA Log
+// MAX_SUMMARY_ROWS guard: fail loudly rather than silently overwrite Zone B (LAYOUT-02).
+const MAX_ZONE_A_ASSET_ROWS = ZONE_B_HEADER_ROW - 3; // = 9
+
 // Number-format pattern for percent / currency columns (skeleton formatting only).
 const PERCENT_FORMAT = { type: "PERCENT", pattern: "0.00%" };
 const CURRENCY_FORMAT = { type: "CURRENCY", pattern: "$#,##0.00" };
@@ -80,6 +87,18 @@ function freezeHeaderRequest(sheetId) {
 // Shared structural request set (build and update apply the same ranges — the
 // Dashboard has no protected data region, so update == build for structure).
 function structuralRequests(sheetId) {
+  // FAIL LOUDLY rather than silently overwrite Zone B. If the registry outgrows the
+  // rows reserved above Zone B's pinned header, Zone A's TOTAL/label rows would stamp
+  // onto Zone B's header and data — the exact "registry growth corrupts layout" defect
+  // LAYOUT-02 exists to prevent. Mirrors the DCA Log MAX_SUMMARY_ROWS guard.
+  if (assets.length > MAX_ZONE_A_ASSET_ROWS) {
+    throw new Error(
+      `assets.length (${assets.length}) exceeds MAX_ZONE_A_ASSET_ROWS ` +
+        `(${MAX_ZONE_A_ASSET_ROWS}); Zone A would overwrite Zone B (header row ` +
+        `${ZONE_B_HEADER_ROW}). Move ZONE_B_HEADER_ROW down or reduce the registry.`
+    );
+  }
+
   const requests = [];
 
   // Frozen header row.
