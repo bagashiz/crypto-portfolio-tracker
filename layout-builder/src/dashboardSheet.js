@@ -86,14 +86,18 @@ function freezeHeaderRequest(sheetId) {
 
 // Shared structural request set (build and update apply the same ranges — the
 // Dashboard has no protected data region, so update == build for structure).
-function structuralRequests(sheetId) {
+//
+// `assetList` defaults to the shared registry; an explicit list is accepted only so the
+// overflow guard and Zone A/Zone B boundary-invariance can be exercised without mutating
+// the import (mirrors dcaLogSheet.js `bandRequests`).
+function structuralRequests(sheetId, assetList = assets) {
   // FAIL LOUDLY rather than silently overwrite Zone B. If the registry outgrows the
   // rows reserved above Zone B's pinned header, Zone A's TOTAL/label rows would stamp
   // onto Zone B's header and data — the exact "registry growth corrupts layout" defect
   // LAYOUT-02 exists to prevent. Mirrors the DCA Log MAX_SUMMARY_ROWS guard.
-  if (assets.length > MAX_ZONE_A_ASSET_ROWS) {
+  if (assetList.length > MAX_ZONE_A_ASSET_ROWS) {
     throw new Error(
-      `assets.length (${assets.length}) exceeds MAX_ZONE_A_ASSET_ROWS ` +
+      `assets.length (${assetList.length}) exceeds MAX_ZONE_A_ASSET_ROWS ` +
         `(${MAX_ZONE_A_ASSET_ROWS}); Zone A would overwrite Zone B (header row ` +
         `${ZONE_B_HEADER_ROW}). Move ZONE_B_HEADER_ROW down or reduce the registry.`
     );
@@ -106,12 +110,12 @@ function structuralRequests(sheetId) {
 
   // Zone A header + per-asset rows + TOTAL row.
   requests.push(labelRowRequest(sheetId, ZONE_A_HEADER_ROW, 1, ZONE_A_HEADERS));
-  assets.forEach((asset, i) => {
+  assetList.forEach((asset, i) => {
     const row = ZONE_A_HEADER_ROW + 1 + i;
     // First column is the asset id; remaining cells stay empty (filled by Phase 5).
     requests.push(labelRowRequest(sheetId, row, 1, [asset.id]));
   });
-  const zoneATotalRow = ZONE_A_HEADER_ROW + 1 + assets.length;
+  const zoneATotalRow = ZONE_A_HEADER_ROW + 1 + assetList.length;
   requests.push(labelRowRequest(sheetId, zoneATotalRow, 1, ["TOTAL"]));
 
   // Zone A number formats: Price/Value currency (cols C-D), Target/APY percent.
@@ -121,11 +125,11 @@ function structuralRequests(sheetId) {
 
   // Zone B header + per-asset rows + TOTALS row.
   requests.push(labelRowRequest(sheetId, ZONE_B_HEADER_ROW, 1, ZONE_B_HEADERS));
-  assets.forEach((asset, i) => {
+  assetList.forEach((asset, i) => {
     const row = ZONE_B_HEADER_ROW + 1 + i;
     requests.push(labelRowRequest(sheetId, row, 1, [asset.id]));
   });
-  const zoneBTotalsRow = ZONE_B_HEADER_ROW + 1 + assets.length;
+  const zoneBTotalsRow = ZONE_B_HEADER_ROW + 1 + assetList.length;
   requests.push(labelRowRequest(sheetId, zoneBTotalsRow, 1, ["TOTALS"]));
 
   // Zone B number formats: Target/Actual/Drift/APY percent.
@@ -136,15 +140,21 @@ function structuralRequests(sheetId) {
 }
 
 // Build the Dashboard structural skeleton (first-time --build).
-export function dashboardBuildRequests(sheetId) {
-  return structuralRequests(sheetId);
+// `assetList` defaults to the shared registry (tests pass an explicit list to drive the
+// overflow guard / Zone A-Zone B boundary-invariance without mutating the import).
+export function dashboardBuildRequests(sheetId, assetList = assets) {
+  return structuralRequests(sheetId, assetList);
 }
 
 // Re-apply the Dashboard structure idempotently (--update). No protected data region
 // on the Dashboard, so this mirrors the build structural ranges (labels/formats/frozen).
-export function dashboardUpdateRequests(sheetId) {
-  return structuralRequests(sheetId);
+export function dashboardUpdateRequests(sheetId, assetList = assets) {
+  return structuralRequests(sheetId, assetList);
 }
+
+// Re-export the Zone B header row and Zone A cap so tests can assert the no-collision
+// invariant (zoneATotalRow < ZONE_B_HEADER_ROW) without recomputing the magic literal.
+export { ZONE_B_HEADER_ROW, MAX_ZONE_A_ASSET_ROWS };
 
 // Re-export the sheet name so callers (index.js) resolve the target tab via one place.
 export { DASHBOARD };
