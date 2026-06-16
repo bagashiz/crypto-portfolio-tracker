@@ -20,8 +20,6 @@
 //         bounded above DATA_START_ROW (proven by Plan 01 unit test). This file adds NO
 //         ad-hoc range write/clear, so the DCA Log transaction data region is never addressed.
 
-import { google } from "googleapis";
-
 import { getSheetsClient } from "./auth.js";
 import { getSpreadsheetId, DASHBOARD, DCA_LOG } from "./config.js";
 import { dashboardBuildRequests, dashboardUpdateRequests } from "./dashboardSheet.js";
@@ -160,7 +158,6 @@ async function main() {
 
   // Resolve + fail-fast validate SPREADSHEET_ID at the entry point (WR-03: validation is
   // now lazy in config.js, so the single runtime caller that needs the id performs it).
-  void google;
   const spreadsheetId = getSpreadsheetId();
 
   const sheets = getSheetsClient();
