@@ -23,16 +23,17 @@
  */
 import { hello } from "./Hello";
 import { ASSETS } from "./Config";
-import { setup } from "./Properties";
+import { testApi } from "./Diagnostics";
 import { getHyperliquidData } from "./HyperliquidApi";
 import { getJupiterData } from "./JupiterApi";
 
-// hello() and setup() are the editor-callable entry points this phase (D-12).
+// hello() and testApi() are the editor-callable entry points this phase (D-12).
 // Expose live implementations on a single namespaced global. The post-build
 // footer (scripts/appendGlobals.ts) adds top-level `function hello()` /
-// `function setup()` shims that the editor picker discovers and that delegate
-// here at runtime. setup() seeds the three Script Properties (SEC-01/SEC-02).
-(globalThis as any).__ENTRY__ = { hello, setup };
+// `function testApi()` shims that the editor picker discovers and that delegate
+// here at runtime. testApi() runs both providers live and logs their results so
+// the deployed data layer can be smoke-tested from the editor.
+(globalThis as any).__ENTRY__ = { hello, testApi };
 
 // Keep the bare-name global too — harmless, and preserves the D-03 contract that
 // the function is reachable via globalThis (the editor picker just can't see it
