@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation** - Repo skeleton, gitignore, Apps Script toolchain verified, asset config registry in place (completed 2026-06-14)
 - [x] **Phase 2: Layout Builder** - Service-account layout builder creates and idempotently updates Dashboard + DCA Log tabs; LAYOUT-02 data-region safety fixed (DATA_START_ROW pinned to a fixed literal) — verified, UAT-passed, threat-secure (completed 2026-06-16)
-- [ ] **Phase 3: Data Layer** - Apps Script provider modules (Hyperliquid spot, Jupiter prices + Jupiter Ultra balances) with the Jupiter key and wallet config wired via PropertiesService
+- [x] **Phase 3: Data Layer** - Apps Script provider modules (Hyperliquid spot, Jupiter prices + Jupiter Ultra balances) with the Jupiter key and wallet config wired via PropertiesService (completed 2026-06-17)
 - [ ] **Phase 4: Refresh & Caching** - Time-driven trigger runs batched writes with blob cache and graceful degradation per provider
 - [ ] **Phase 5: PnL & Allocation** - DCA log, cost-basis summary block, unrealized P&L display with color coding, and allocation health zone
 
@@ -94,7 +94,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 **Wave 3** *(depends on 03-01, 03-02)*
 
-- [ ] 03-03-PLAN.md — Wiring + live verify: retain providers in the bundle, expose setup() editor global (D-12), build/grep verify, human-verify checkpoint for live Script-Properties setup + provider smoke test + no-secret-committed gate
+- [x] 03-03-PLAN.md — Wiring + live verify: retain providers in the bundle, expose setup() editor global (D-12), build/grep verify, human-verify checkpoint for live Script-Properties setup + provider smoke test + no-secret-committed gate
 
 ### Phase 4: Refresh & Caching
 
@@ -135,6 +135,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 |-------|----------------|--------|-----------|
 | 1. Foundation | 2/2 | Complete    | 2026-06-14 |
 | 2. Layout Builder | 3/3 | Complete    | 2026-06-16 |
-| 3. Data Layer | 2/3 | In Progress|  |
+| 3. Data Layer | 3/3 | Complete   | 2026-06-17 |
 | 4. Refresh & Caching | 0/TBD | Not started | - |
 | 5. PnL & Allocation | 0/TBD | Not started | - |
