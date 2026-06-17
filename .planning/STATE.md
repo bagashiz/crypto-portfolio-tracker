@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-06-13)
 ## Current Position
 
 Phase: 04 (refresh-caching) — EXECUTING
-Plan: 1 of 3
+Plan: 3 of 3 (04-03 Task 1 done; paused at Task 2 human-verify checkpoint)
 Status: Executing Phase 04
-Last activity: 2026-06-17 -- Phase 04 execution started
+Last activity: 2026-06-17 -- 04-03 Task 1: deployed refresh layer (clasp push --force) + materialized status labels; awaiting live human-verify
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -91,5 +91,13 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-06-17T14:02:13.748Z
-Stopped at: Phase 4 context gathered
-Resume file: .planning/phases/04-refresh-caching/04-CONTEXT.md
+Stopped at: 04-03 Task 2 — live human-verify checkpoint (refreshAll/trigger/degradation in the editor)
+Resume file: .planning/phases/04-refresh-caching/04-03-PLAN.md
+
+### Note (04-03 Task 1 deviation)
+
+The package `deploy` script runs bare `clasp push`, but clasp 3.3.0 prompts before
+overwriting a changed remote manifest and silently "Skipping push." when non-interactive.
+The new OAuth scopes changed appsscript.json, so the push required `clasp push --force`.
+Task 1 was completed with `bunx clasp push --force` (pushed dist/Code.js + dist/appsscript.json).
+Consider updating apps-script/package.json `deploy` to `clasp push --force`.
