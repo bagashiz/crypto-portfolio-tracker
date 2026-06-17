@@ -31,6 +31,25 @@ const ZONE_B_HEADERS = ["Asset", "Target %", "Actual %", "Drift", "Risk", "APY %
 // MAX_SUMMARY_ROWS guard: fail loudly rather than silently overwrite Zone B (LAYOUT-02).
 const MAX_ZONE_A_ASSET_ROWS = ZONE_B_HEADER_ROW - 3; // = 9
 
+// Per-venue refresh status block (REFRESH-04, D-04/D-05/D-06).
+// COLUMN-anchored top-right of the Dashboard, well to the right of Zone A/B (cols A–G),
+// so the MAX_ZONE_A_ASSET_ROWS guard — which only shifts ROWS as the registry grows —
+// can never make it collide with zone data. The layout builder owns ONLY the static
+// labels here (venue names + header row); refreshAll() in Apps Script writes the dynamic
+// timestamp + Stale? VALUES into the adjacent cells (D-05 build-time/run-time split).
+//
+// Exact geometry (so Plan 01's refreshAll() targets the matching cells):
+//   Col I (1-based 9) = STATUS_START_COL: venue label   ("Status" / "Hyperliquid" / "Solana/Jupiter")
+//   Col J (1-based 10)                  : LastUpdated    (header static; value rows filled by refreshAll)
+//   Col K (1-based 11)                  : Stale?         (header static; value rows filled by refreshAll)
+//   Row 1 (STATUS_START_ROW) = header row: ["Status", "LastUpdated", "Stale?"]
+//   Row 2                    = Hyperliquid line:   ["Hyperliquid"]    (J2/K2 filled by refreshAll)
+//   Row 3                    = Solana/Jupiter line:["Solana/Jupiter"] (J3/K3 filled by refreshAll)
+const STATUS_START_COL = 9; // 1-based col I — right of Zone A's last col G (=7)
+const STATUS_START_ROW = 1; // 1-based row 1 — top-right, above Zone B's header row (12)
+const STATUS_HEADERS = ["Status", "LastUpdated", "Stale?"];
+const STATUS_VENUE_LINES = ["Hyperliquid", "Solana/Jupiter"];
+
 // Number-format pattern for percent / currency columns (skeleton formatting only).
 const PERCENT_FORMAT = { type: "PERCENT", pattern: "0.00%" };
 const CURRENCY_FORMAT = { type: "CURRENCY", pattern: "$#,##0.00" };
@@ -136,6 +155,16 @@ function structuralRequests(sheetId, assetList = assets) {
   requests.push(numberFormatRequest(sheetId, ZONE_B_HEADER_ROW + 1, zoneBTotalsRow, 2, 4, PERCENT_FORMAT));
   requests.push(numberFormatRequest(sheetId, ZONE_B_HEADER_ROW + 1, zoneBTotalsRow, 6, 6, PERCENT_FORMAT));
 
+  // Per-venue refresh status block — STATIC labels only (D-05). Column-anchored at
+  // STATUS_START_COL so it is immune to the row-shifting MAX_ZONE_A_ASSET_ROWS guard.
+  // Header row, then exactly 2 venue lines (D-04). Composed via labelRowRequest (the
+  // single-source helper) — never a hand-built updateCells literal. The adjacent
+  // LastUpdated/Stale? value cells stay empty for refreshAll() to populate.
+  requests.push(labelRowRequest(sheetId, STATUS_START_ROW, STATUS_START_COL, STATUS_HEADERS));
+  STATUS_VENUE_LINES.forEach((venue, i) => {
+    requests.push(labelRowRequest(sheetId, STATUS_START_ROW + 1 + i, STATUS_START_COL, [venue]));
+  });
+
   return requests;
 }
 
@@ -155,6 +184,10 @@ export function dashboardUpdateRequests(sheetId, assetList = assets) {
 // Re-export the Zone B header row and Zone A cap so tests can assert the no-collision
 // invariant (zoneATotalRow < ZONE_B_HEADER_ROW) without recomputing the magic literal.
 export { ZONE_B_HEADER_ROW, MAX_ZONE_A_ASSET_ROWS };
+
+// Re-export the status-block placement constants so tests can assert column-anchoring
+// (right of Zone A) and non-collision with the zones without re-deriving the literals.
+export { STATUS_START_COL, STATUS_START_ROW, STATUS_HEADERS, STATUS_VENUE_LINES };
 
 // Re-export the sheet name so callers (index.js) resolve the target tab via one place.
 export { DASHBOARD };
