@@ -1,10 +1,13 @@
 /**
  * Script Property access for the data layer (SEC-01, SEC-02).
  *
- * Runtime config (wallet addresses + Jupiter API key) lives in the Apps Script
- * Script Property store, NEVER in committed source. Set the three keys
- * (HL_WALLET_ADDRESS, SOL_WALLET_ADDRESS, JUP_API_KEY) once in Project Settings
- * -> Script Properties; they persist across deploys.
+ * Runtime config (target spreadsheet id + wallet addresses + Jupiter API key)
+ * lives in the Apps Script Script Property store, NEVER in committed source. Set
+ * the four keys (SPREADSHEET_ID, HL_WALLET_ADDRESS, SOL_WALLET_ADDRESS,
+ * JUP_API_KEY) once in Project Settings -> Script Properties; they persist across
+ * deploys. SPREADSHEET_ID is required because this is a standalone (non
+ * container-bound) script — refreshAll opens the sheet by id, not via
+ * getActiveSpreadsheet().
  *
  *   - getScriptProp(name): fail-loud reader. A missing/empty property throws
  *     instead of returning null/"" — a null value silently flowing into an
