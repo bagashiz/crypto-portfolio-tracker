@@ -112,8 +112,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 **Wave 1**
 
-- [ ] 04-01-PLAN.md — Apps Script refresh core: refreshAll() (per-venue degrade + PRICES_ALL last-good blob + single setValues), idempotent installTrigger/removeTrigger, new OAuth scopes, entry-global wiring
-- [ ] 04-02-PLAN.md — Layout builder: stamp the static 2-line per-venue status block (LastUpdated/Stale?) in fixed top-right columns (D-05/D-06), offline non-collision tests
+- [x] 04-01-PLAN.md — Apps Script refresh core: refreshAll() (per-venue degrade + PRICES_ALL last-good blob + single setValues), idempotent installTrigger/removeTrigger, new OAuth scopes, entry-global wiring
+- [x] 04-02-PLAN.md — Layout builder: stamp the static 2-line per-venue status block (LastUpdated/Stale?) in fixed top-right columns (D-05/D-06), offline non-collision tests
 
 **Wave 2** *(depends on 04-01, 04-02)*
 
@@ -145,5 +145,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 1. Foundation | 2/2 | Complete    | 2026-06-14 |
 | 2. Layout Builder | 3/3 | Complete    | 2026-06-16 |
 | 3. Data Layer | 3/3 | Complete    | 2026-06-17 |
-| 4. Refresh & Caching | 0/3 | Not started | - |
+| 4. Refresh & Caching | 2/3 | In Progress|  |
 | 5. PnL & Allocation | 0/TBD | Not started | - |
