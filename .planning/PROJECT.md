@@ -18,6 +18,8 @@ See accurate unrealized PnL — live portfolio value measured against DCA-weight
 - [x] Apps Script fetches live Jupiter prices for Solana mints via raw `UrlFetchApp` (Validated in Phase 3 — `price/v3`, keyed by mint)
 - [x] Apps Script fetches live Solana balances via raw `UrlFetchApp` (Validated in Phase 3 — via Jupiter `ultra/v1/balances` `uiAmount`, rather than raw RPC `getTokenAccountsByOwner`)
 - [x] Secrets kept out of source: wallet addresses + Jupiter key live in `PropertiesService` (set in the editor, never committed); service-account key + `.clasp.json` gitignored (Validated in Phase 3 — Jupiter key in Script Properties, not GCP Secret Manager, which was descoped to the minimal `external_request` scope)
+- [x] Prices/balances written to the sheet on a time-driven trigger (scheduled `refreshAll()`), single batched `setValues` write (Validated in Phase 4 — live editor run populates Zone A Qty/Price in one batched write; idempotent `installTrigger`/`removeTrigger` confirmed in the Triggers panel)
+- [x] Single-blob cache (`PRICES_ALL`) with TTL + graceful degradation — per-venue try/catch, `LastUpdated`/`Stale?` status, never overwrite good data with errors (Validated in Phase 4 — induced single-venue failure kept last-good values + flagged only that venue Stale?, self-healed next run; cache backfilled from written rows so it never diverges from the sheet on an outage+eviction coincidence, CR-01)
 
 ### Active
 
@@ -25,8 +27,6 @@ See accurate unrealized PnL — live portfolio value measured against DCA-weight
 
 - [ ] Layout builder (local Node + `googleapis` service account) creates the Dashboard + DCA Log tabs programmatically with headers, formats, frozen rows, summary rows, and formulas
 - [ ] Layout builder `--update` is idempotent — re-applies structure/formats/formulas without ever touching the DCA Log data rows
-- [ ] Prices/balances written to the sheet on a time-driven trigger (scheduled `refreshAll()`), single batched `setValues` write
-- [ ] Single-blob cache (`PRICES_ALL`) with TTL + graceful degradation (per-provider try/catch, `LastUpdated`/`Stale?` status, never overwrite good data with errors)
 - [ ] DCA Log tab → DCA-weighted average cost basis per asset (single source of truth)
 - [ ] Dashboard shows unrealized P&L in USD and %, color-coded (green/red conditional formatting)
 - [ ] Allocation health zone: target %, actual %, drift, risk score, APY, monthly yield
@@ -69,10 +69,10 @@ See accurate unrealized PnL — live portfolio value measured against DCA-weight
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Scheduled time-driven trigger writes data (not custom `=GET_*()` functions) | Custom functions recalc unpredictably and can't reliably hold cache (PLAN.md §5.4) | — Pending |
+| Scheduled time-driven trigger writes data (not custom `=GET_*()` functions) | Custom functions recalc unpredictably and can't reliably hold cache (PLAN.md §5.4) | ✓ Established in Phase 4 (`refreshAll()` on a 5-min trigger; one batched `setValues`) |
 | Two-runtime architecture (service-account layout builder + clasp Apps Script) | Version-control sheet structure in code; isolate build-time vs run-time | ✓ Established in Phase 1 (both packages scaffolded, deps isolated) |
-| Apps Script is **container-bound** to the spreadsheet (not standalone) | Bound script uses `SpreadsheetApp.getActiveSpreadsheet()` — no spreadsheet ID needed in `PropertiesService` on the Apps Script side; matches the single-sheet model. Implies: the sheet must be created first, then a script bound to it (Extensions → Apps Script) to obtain the `scriptId` that `clasp` pushes to. Does NOT affect the layout builder, which always addresses the sheet by ID via the service account over the Sheets API. | — Pending (Phase 3) |
-| Apps Script globals exposed via top-level `function` shims (`appendGlobals.ts`), not runtime `globalThis` assignment alone | `bun build --format=iife` traps declarations in a closure; the editor function picker only discovers static top-level `function` declarations. Runtime `globalThis.x = x` is invisible to the picker. | ✓ Phase 1 — pattern proven; future `refreshAll`/`installTrigger`/`removeTrigger` add one line to the `ENTRY_GLOBALS` array |
+| Apps Script is **container-bound** to the spreadsheet (not standalone) | Bound script uses `SpreadsheetApp.getActiveSpreadsheet()` — no spreadsheet ID needed in `PropertiesService` on the Apps Script side; matches the single-sheet model. Implies: the sheet must be created first, then a script bound to it (Extensions → Apps Script) to obtain the `scriptId` that `clasp` pushes to. Does NOT affect the layout builder, which always addresses the sheet by ID via the service account over the Sheets API. | ✓ Confirmed in Phase 4 — initial deploy was standalone (`getActiveSpreadsheet()` returned null → live `getSheetByName` crash at the verify gate); switched to a Sheet-bound script and reverted to `getActiveSpreadsheet()`. `.clasp.json` `scriptId` repointed to the bound project. |
+| Apps Script globals exposed via top-level `function` shims (`appendGlobals.ts`), not runtime `globalThis` assignment alone | `bun build --format=iife` traps declarations in a closure; the editor function picker only discovers static top-level `function` declarations. Runtime `globalThis.x = x` is invisible to the picker. | ✓ Phase 1 pattern; Phase 4 surfaces `refreshAll`/`installTrigger`/`removeTrigger` as the `ENTRY_GLOBALS`, and dropped the Phase 1/3 scaffold entries `hello()`/`testApi()` |
 | Fresh greenfield build (no existing deployed project to preserve) | Repo is only a scaffold; no live bound script to extend | — Pending |
 | Raw HTTP everywhere, no SDKs | Apps Script has no npm runtime; layout builder only talks to Sheets API | — Pending |
 | On-chain balance fetch gated behind `FETCH_BALANCES` flag, manual holdings first | Avoid two failure modes (price refresh + RPC) at once; RPC rate limits | — Pending |
@@ -97,4 +97,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-06-17 after Phase 3 (Data Layer) completion — both venue providers (`getHyperliquidData`/`getJupiterData`) ship the D-09 `Record<id,{price,qty}>` contract over raw `UrlFetchApp`, wired into the bundle and live-verified in the deployed editor via `testApi()`. A spot index-alignment bug (HL `ctxs` not positionally aligned with `universe`) was caught at the live human-verify checkpoint and fixed (join by pair name == ctx.coin). Config lives in Script Properties; no secrets committed.*
+*Last updated: 2026-06-17 after Phase 4 (Refresh & Caching) completion — `refreshAll()` fetches both venues live each run, writes Zone A Qty/Price in one batched `setValues`, maintains the `PRICES_ALL` last-good blob with per-venue graceful degradation (`LastUpdated`/`Stale?`), and runs on a 5-min time-driven trigger (idempotent `installTrigger`/`removeTrigger`). The status labels are stamped build-time by the layout builder. Live-verified against real wallets including a simulated partial failure. Two issues caught at the live gate: a standalone-vs-bound mismatch (`getActiveSpreadsheet()` null → switched to a Sheet-bound script) and a code-review blocker (CR-01: cache could lose last-good on outage+eviction → backfill from written rows). Scaffold entry points `hello()`/`testApi()` removed. Phase 3 footer retained for history: both providers ship the D-09 `Record<id,{price,qty}>` contract over raw `UrlFetchApp`.*
