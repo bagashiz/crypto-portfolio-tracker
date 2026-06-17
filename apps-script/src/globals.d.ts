@@ -15,10 +15,14 @@ declare global {
   // The inlined shared asset registry (D-05), exposed for provider/refresh code.
   // eslint-disable-next-line no-var
   var ASSETS: readonly Asset[];
-  // Reserved for later phases (assigned in entry.ts as they land):
-  // var refreshAll: () => void;
-  // var installTrigger: () => void;
-  // var removeTrigger: () => void;
+  // Phase 4 refresh + trigger entry points (assigned in entry.ts).
+  // refreshAll() is also the time-driven trigger handler (D-09).
+  // eslint-disable-next-line no-var
+  var refreshAll: () => void;
+  // eslint-disable-next-line no-var
+  var installTrigger: () => void;
+  // eslint-disable-next-line no-var
+  var removeTrigger: () => void;
 }
 
 export {};
