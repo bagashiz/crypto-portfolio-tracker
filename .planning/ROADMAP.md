@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Foundation** - Repo skeleton, gitignore, Apps Script toolchain verified, asset config registry in place (completed 2026-06-14)
 - [x] **Phase 2: Layout Builder** - Service-account layout builder creates and idempotently updates Dashboard + DCA Log tabs; LAYOUT-02 data-region safety fixed (DATA_START_ROW pinned to a fixed literal) — verified, UAT-passed, threat-secure (completed 2026-06-16)
 - [x] **Phase 3: Data Layer** - Apps Script provider modules (Hyperliquid spot, Jupiter prices + Jupiter Ultra balances) with the Jupiter key and wallet config wired via PropertiesService (completed 2026-06-17)
-- [ ] **Phase 4: Refresh & Caching** - Time-driven trigger runs batched writes with blob cache and graceful degradation per provider
+- [x] **Phase 4: Refresh & Caching** - Time-driven trigger runs batched writes with blob cache and graceful degradation per provider (completed 2026-06-17)
 - [ ] **Phase 5: PnL & Allocation** - DCA log, cost-basis summary block, unrealized P&L display with color coding, and allocation health zone
 
 ## Phase Details
@@ -117,7 +117,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 **Wave 2** *(depends on 04-01, 04-02)*
 
-- [ ] 04-03-PLAN.md — Deploy + live-verify checkpoint: clasp push, one-time layout --update, live refresh, induced single-venue degradation + self-heal, trigger idempotency
+- [x] 04-03-PLAN.md — Deploy + live-verify checkpoint: clasp push, one-time layout --update, live refresh, induced single-venue degradation + self-heal, trigger idempotency
 
 ### Phase 5: PnL & Allocation
 
@@ -145,5 +145,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 1. Foundation | 2/2 | Complete    | 2026-06-14 |
 | 2. Layout Builder | 3/3 | Complete    | 2026-06-16 |
 | 3. Data Layer | 3/3 | Complete    | 2026-06-17 |
-| 4. Refresh & Caching | 2/3 | In Progress|  |
+| 4. Refresh & Caching | 3/3 | Complete    | 2026-06-17 |
 | 5. PnL & Allocation | 0/TBD | Not started | - |

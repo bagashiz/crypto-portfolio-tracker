@@ -30,10 +30,10 @@ Requirements for the initial release. Each maps to a roadmap phase.
 
 ### Refresh & Caching
 
-- [ ] **REFRESH-01**: A time-driven trigger runs `refreshAll()` on a configurable interval (default 5 min), installable/removable via `Triggers`
-- [ ] **REFRESH-02**: `refreshAll()` writes prices/balances to the Dashboard in a single batched `setValues` write (never cell-by-cell)
-- [ ] **REFRESH-03**: A single-blob cache (`PRICES_ALL`) with TTL guards against rate limits, treated as soft with a live-fetch fallback on miss
-- [ ] **REFRESH-04**: Graceful degradation — each provider wrapped in independent try/catch, with `LastUpdated`/`Stale?` status cells; a failed call never overwrites good cached data with errors
+- [x] **REFRESH-01**: A time-driven trigger runs `refreshAll()` on a configurable interval (default 5 min), installable/removable via `Triggers`
+- [x] **REFRESH-02**: `refreshAll()` writes prices/balances to the Dashboard in a single batched `setValues` write (never cell-by-cell)
+- [x] **REFRESH-03**: A single-blob cache (`PRICES_ALL`) with TTL guards against rate limits, treated as soft with a live-fetch fallback on miss
+- [x] **REFRESH-04**: Graceful degradation — each provider wrapped in independent try/catch, with `LastUpdated`/`Stale?` status cells; a failed call never overwrites good cached data with errors
 
 ### Cost Basis & PnL
 
@@ -92,10 +92,10 @@ Which phases cover which requirements. Populated during roadmap creation.
 | DATA-02 | Phase 3 | Complete |
 | DATA-03 | Phase 3 | Complete |
 | DATA-04 | Phase 3 | Descoped |
-| REFRESH-01 | Phase 4 | Pending |
-| REFRESH-02 | Phase 4 | Pending |
-| REFRESH-03 | Phase 4 | Pending |
-| REFRESH-04 | Phase 4 | Pending |
+| REFRESH-01 | Phase 4 | Complete |
+| REFRESH-02 | Phase 4 | Complete |
+| REFRESH-03 | Phase 4 | Complete |
+| REFRESH-04 | Phase 4 | Complete |
 | PNL-01 | Phase 5 | Pending |
 | PNL-02 | Phase 5 | Pending |
 | PNL-03 | Phase 5 | Pending |
