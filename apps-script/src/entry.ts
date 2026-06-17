@@ -26,14 +26,17 @@ import { ASSETS } from "./Config";
 import { testApi } from "./Diagnostics";
 import { getHyperliquidData } from "./HyperliquidApi";
 import { getJupiterData } from "./JupiterApi";
+import { refreshAll } from "./Refresh";
+import { installTrigger, removeTrigger } from "./Triggers";
 
-// hello() and testApi() are the editor-callable entry points this phase (D-12).
+// Editor-callable entry points: hello/testApi (Phase 1/3) plus the Phase 4
+// refresh + trigger globals (refreshAll/installTrigger/removeTrigger).
 // Expose live implementations on a single namespaced global. The post-build
-// footer (scripts/appendGlobals.ts) adds top-level `function hello()` /
-// `function testApi()` shims that the editor picker discovers and that delegate
-// here at runtime. testApi() runs both providers live and logs their results so
-// the deployed data layer can be smoke-tested from the editor.
-(globalThis as any).__ENTRY__ = { hello, testApi };
+// footer (scripts/appendGlobals.ts) adds a top-level `function name()` shim per
+// entry global that the editor picker discovers and that delegates here at
+// runtime. refreshAll() is also the time-driven trigger handler installed by
+// installTrigger(); it reads the providers from inside the bundle.
+(globalThis as any).__ENTRY__ = { hello, testApi, refreshAll, installTrigger, removeTrigger };
 
 // Keep the bare-name global too — harmless, and preserves the D-03 contract that
 // the function is reachable via globalThis (the editor picker just can't see it
@@ -52,13 +55,3 @@ globalThis.ASSETS = ASSETS;
 // so appendGlobals.ts emits no top-level shim for them — they ship as bundled
 // functions only. Phase 4's refreshAll() will call them from inside the bundle.
 (globalThis as any).__PROVIDERS__ = { getHyperliquidData, getJupiterData };
-
-// TODO(Phase 4 — refresh): expose the real trigger entry point.
-// Add `refreshAll` to the __ENTRY__ object above AND to the name array in
-// scripts/appendGlobals.ts so the editor picker discovers its top-level shim.
-// refreshAll() will read from __PROVIDERS__ (getHyperliquidData/getJupiterData).
-// (globalThis as any).__ENTRY__.refreshAll = refreshAll;
-// TODO(Phase 4 — triggers): expose install/remove of the time-driven trigger.
-// Same one-line pattern for installTrigger / removeTrigger.
-// (globalThis as any).__ENTRY__.installTrigger = installTrigger;
-// (globalThis as any).__ENTRY__.removeTrigger = removeTrigger;
