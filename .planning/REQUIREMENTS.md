@@ -23,9 +23,9 @@ Requirements for the initial release. Each maps to a roadmap phase.
 
 ### Price & Balance Data
 
-- [ ] **DATA-01**: Apps Script fetches Hyperliquid **spot** mid prices for `UBTC`/`HYPE`/`XAUT0` via raw `UrlFetchApp` (spot price path — not perp `allMids`-by-symbol; revised Phase 3 D-05)
-- [ ] **DATA-02**: Apps Script fetches Jupiter prices for the Solana mints via raw `UrlFetchApp` (keyed `api.jup.ag` `price/v3`, `x-api-key` header)
-- [ ] **DATA-03**: Apps Script fetches Solana balances via Jupiter `ultra/v1/balances` (raw `UrlFetchApp`), always fetched (revised Phase 3 D-01 — Solana RPC `getTokenAccountsByOwner` removed)
+- [x] **DATA-01**: Apps Script fetches Hyperliquid **spot** mid prices for `UBTC`/`HYPE`/`XAUT0` via raw `UrlFetchApp` (spot price path — not perp `allMids`-by-symbol; revised Phase 3 D-05)
+- [x] **DATA-02**: Apps Script fetches Jupiter prices for the Solana mints via raw `UrlFetchApp` (keyed `api.jup.ag` `price/v3`, `x-api-key` header)
+- [x] **DATA-03**: Apps Script fetches Solana balances via Jupiter `ultra/v1/balances` (raw `UrlFetchApp`), always fetched (revised Phase 3 D-01 — Solana RPC `getTokenAccountsByOwner` removed)
 - [ ] ~~**DATA-04**~~ **(DESCOPED)**: Manual-holdings mode dropped — balances are always fetched from both venues; no `FETCH_BALANCES` flag (superseded by Phase 3 D-03)
 
 ### Refresh & Caching
@@ -49,8 +49,8 @@ Requirements for the initial release. Each maps to a roadmap phase.
 
 ### Security & Secrets
 
-- [ ] **SEC-01**: The Jupiter API key is stored in `PropertiesService` Script Property `JUP_API_KEY`, read at call time and absent from committed source (revised Phase 3 D-07 — GCP Secret Manager / `ScriptApp.getOAuthToken()` removed)
-- [ ] **SEC-02**: Wallet addresses and runtime config are stored in `PropertiesService`, not hardcoded
+- [x] **SEC-01**: The Jupiter API key is stored in `PropertiesService` Script Property `JUP_API_KEY`, read at call time and absent from committed source (revised Phase 3 D-07 — GCP Secret Manager / `ScriptApp.getOAuthToken()` removed)
+- [x] **SEC-02**: Wallet addresses and runtime config are stored in `PropertiesService`, not hardcoded
 - [x] **SEC-03**: The service-account key is local-only and gitignored; `.gitignore` covers `*.key.json`, `.clasp.json`, and `apps-script/dist`
 
 ## v2 Requirements
@@ -86,11 +86,11 @@ Which phases cover which requirements. Populated during roadmap creation.
 | SEC-03 | Phase 1 | Complete |
 | LAYOUT-01 | Phase 2 | Pending |
 | LAYOUT-02 | Phase 2 | Pending |
-| SEC-01 | Phase 3 | Pending |
-| SEC-02 | Phase 3 | Pending |
-| DATA-01 | Phase 3 | Pending |
-| DATA-02 | Phase 3 | Pending |
-| DATA-03 | Phase 3 | Pending |
+| SEC-01 | Phase 3 | Complete |
+| SEC-02 | Phase 3 | Complete |
+| DATA-01 | Phase 3 | Complete |
+| DATA-02 | Phase 3 | Complete |
+| DATA-03 | Phase 3 | Complete |
 | DATA-04 | Phase 3 | Descoped |
 | REFRESH-01 | Phase 4 | Pending |
 | REFRESH-02 | Phase 4 | Pending |
