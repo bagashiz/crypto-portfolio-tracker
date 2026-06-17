@@ -14,7 +14,10 @@ See accurate unrealized PnL — live portfolio value measured against DCA-weight
 
 <!-- Shipped and confirmed valuable. -->
 
-(None yet — ship to validate. Repo is a fresh `bun init` scaffold; no app code exists.)
+- [x] Apps Script fetches live Hyperliquid spot prices via raw `UrlFetchApp` (Validated in Phase 3 — `spotMetaAndAssetCtxs`, asset-ctx joined by pair name not array index; BTC/HYPE/XAUt confirmed live in the deployed editor)
+- [x] Apps Script fetches live Jupiter prices for Solana mints via raw `UrlFetchApp` (Validated in Phase 3 — `price/v3`, keyed by mint)
+- [x] Apps Script fetches live Solana balances via raw `UrlFetchApp` (Validated in Phase 3 — via Jupiter `ultra/v1/balances` `uiAmount`, rather than raw RPC `getTokenAccountsByOwner`)
+- [x] Secrets kept out of source: wallet addresses + Jupiter key live in `PropertiesService` (set in the editor, never committed); service-account key + `.clasp.json` gitignored (Validated in Phase 3 — Jupiter key in Script Properties, not GCP Secret Manager, which was descoped to the minimal `external_request` scope)
 
 ### Active
 
@@ -22,15 +25,11 @@ See accurate unrealized PnL — live portfolio value measured against DCA-weight
 
 - [ ] Layout builder (local Node + `googleapis` service account) creates the Dashboard + DCA Log tabs programmatically with headers, formats, frozen rows, summary rows, and formulas
 - [ ] Layout builder `--update` is idempotent — re-applies structure/formats/formulas without ever touching the DCA Log data rows
-- [ ] Apps Script fetches Hyperliquid mid prices (`allMids`) via raw `UrlFetchApp`
-- [ ] Apps Script fetches Jupiter prices for Solana mints via raw `UrlFetchApp`
-- [ ] Apps Script fetches on-chain Solana balances via raw RPC `getTokenAccountsByOwner` (gated behind a `FETCH_BALANCES` flag)
 - [ ] Prices/balances written to the sheet on a time-driven trigger (scheduled `refreshAll()`), single batched `setValues` write
 - [ ] Single-blob cache (`PRICES_ALL`) with TTL + graceful degradation (per-provider try/catch, `LastUpdated`/`Stale?` status, never overwrite good data with errors)
 - [ ] DCA Log tab → DCA-weighted average cost basis per asset (single source of truth)
 - [ ] Dashboard shows unrealized P&L in USD and %, color-coded (green/red conditional formatting)
 - [ ] Allocation health zone: target %, actual %, drift, risk score, APY, monthly yield
-- [ ] Secrets handled correctly: Jupiter API key in GCP Secret Manager; wallet addresses + config in `PropertiesService`; service-account key local-only and gitignored
 
 ### Out of Scope
 
@@ -98,4 +97,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-06-16 after Phase 2 (Layout Builder) completion — `--build`/`--update` CLI shipped with provable, non-floating DCA Log data-region safety (LAYOUT-02 fixed: `DATA_START_ROW` is now a fixed literal, never floats with the asset registry).*
+*Last updated: 2026-06-17 after Phase 3 (Data Layer) completion — both venue providers (`getHyperliquidData`/`getJupiterData`) ship the D-09 `Record<id,{price,qty}>` contract over raw `UrlFetchApp`, wired into the bundle and live-verified in the deployed editor via `testApi()`. A spot index-alignment bug (HL `ctxs` not positionally aligned with `universe`) was caught at the live human-verify checkpoint and fixed (join by pair name == ctx.coin). Config lives in Script Properties; no secrets committed.*
