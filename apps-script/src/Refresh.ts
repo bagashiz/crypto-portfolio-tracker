@@ -89,6 +89,44 @@ function toFinite(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
+/**
+ * CR-01: keep the PRICES_ALL cache in lockstep with what's displayed (PURE, bun-testable).
+ *
+ * `CACHE_TTL_SECONDS` (~the refresh interval) means PRICES_ALL routinely evicts
+ * around each run. If a venue then FAILS on a run where the cache already evicted,
+ * the blob would carry NO last-good slice for that venue — even though the sheet
+ * still shows real numbers (sourced from the current-sheet read, D-07). The cache
+ * and the display would silently diverge and recovery history would be lost,
+ * defeating the last-good degradation buffer this phase exists to provide.
+ *
+ * Backfill any ABSENT venue slice from the `[qty, price]` rows actually written so
+ * the cache always mirrors the sheet. A live (fresh) or cache-preserved slice is
+ * left untouched, so a known `lastUpdated` is never clobbered. The recovered slice
+ * has no reliable timestamp (it died with the evicted entry), so `lastUpdated` is
+ * left blank "—" — the values persist (the point), status stays Stale?=TRUE until
+ * the venue self-heals.
+ *
+ * @param blob        the per-venue last-good blob about to be persisted (mutated).
+ * @param assets      the ordered registry (maps row index -> venue + id).
+ * @param writtenRows the `[qty, price]` rows written to Zone A this run.
+ */
+export function backfillBlobFromSheet(
+  blob: PricesBlob,
+  assets: readonly Asset[],
+  writtenRows: number[][],
+): void {
+  (["hyperliquid", "solana"] as const).forEach((venue) => {
+    if (blob[venue]) return; // fresh this run or preserved from cache — keep as-is.
+    const data: VenueData = {};
+    assets.forEach((asset, i) => {
+      if (asset.venue !== venue) return;
+      const row = writtenRows[i] ?? [];
+      data[asset.id] = { qty: toFinite(row[0]), price: toFinite(row[1]) };
+    });
+    blob[venue] = { data, lastUpdated: "—" };
+  });
+}
+
 // --- Dashboard geometry (mirrors layout-builder/src/dashboardSheet.js) ---------
 
 /** Dashboard tab name (container-bound; matches the layout builder's Sheet 1). */
@@ -174,6 +212,12 @@ export function refreshAll(): void {
   sheet
     .getRange(STATUS_HL_ROW, STATUS_LASTUPDATED_COL, statusRows.length, 2)
     .setValues(statusRows);
+
+  // CR-01: before persisting, backfill any venue slice missing from the blob
+  // (failed this run AND evicted from cache) using the values just written, so
+  // the cache never diverges from the sheet and the last-good buffer survives an
+  // outage that coincides with TTL eviction.
+  backfillBlobFromSheet(blob, ASSETS, rows);
 
   // Persist the updated last-good blob (TTL only bounds retention, D-02).
   cache.put(PRICES_ALL, JSON.stringify(blob), CACHE_TTL_SECONDS);

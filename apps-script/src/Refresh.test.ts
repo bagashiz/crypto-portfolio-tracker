@@ -13,7 +13,7 @@
  * (Qty col B, Price col C per D-10).
  */
 import { test, expect } from "bun:test";
-import { assembleRefreshRows } from "./Refresh";
+import { assembleRefreshRows, backfillBlobFromSheet } from "./Refresh";
 import { ASSETS } from "./Config";
 
 type VenueMap = Record<string, { price: number; qty: number }>;
@@ -141,4 +141,46 @@ test("missing current-sheet entry on cold-start does not inject NaN/null — fal
     expect(typeof cell).toBe("number");
     expect(Number.isFinite(cell as number)).toBe(true);
   }
+});
+
+// --- CR-01: cache backfill keeps PRICES_ALL in lockstep with the sheet ----------
+
+test("CR-01: a failed venue with NO cache slice gets backfilled from the written rows", () => {
+  // Solana succeeded (its slice already in the blob); Hyperliquid failed this run
+  // AND PRICES_ALL had evicted, so the blob has no hyperliquid slice. The rows
+  // written to the sheet still carry HL's last-good (from the current-sheet read).
+  const rows = assembleRefreshRows(ASSETS, {
+    hyperliquid: { live: null, cache: null }, // failed + evicted -> falls to current sheet
+    solana: { live: SOL_LIVE, cache: null },
+  }, currentSheet());
+
+  const blob: any = { solana: { data: SOL_LIVE, lastUpdated: "2026-06-17 10:00:00" } };
+  backfillBlobFromSheet(blob, ASSETS, rows);
+
+  // HL slice is recovered from the written values (== current sheet), so the cache
+  // no longer diverges from the display and recovery history survives.
+  expect(blob.hyperliquid).toBeDefined();
+  expect(blob.hyperliquid.data.BTC).toEqual({ qty: 1.1, price: 11111 });
+  expect(blob.hyperliquid.data.XAUt).toEqual({ qty: 3.3, price: 33333 });
+  expect(blob.hyperliquid.lastUpdated).toBe("—"); // no reliable time survived eviction
+  // The healthy venue's slice is left exactly as-is (timestamp not clobbered).
+  expect(blob.solana.lastUpdated).toBe("2026-06-17 10:00:00");
+});
+
+test("CR-01: an existing (fresh/preserved) venue slice is never overwritten", () => {
+  const rows = assembleRefreshRows(ASSETS, {
+    hyperliquid: { live: HL_LIVE, cache: null },
+    solana: { live: SOL_LIVE, cache: null },
+  }, currentSheet());
+
+  const blob: any = {
+    hyperliquid: { data: HL_LIVE, lastUpdated: "2026-06-17 09:00:00" },
+    solana: { data: SOL_LIVE, lastUpdated: "2026-06-17 09:00:00" },
+  };
+  backfillBlobFromSheet(blob, ASSETS, rows);
+
+  // Both slices preserved verbatim — backfill only fills ABSENT slices.
+  expect(blob.hyperliquid.data).toEqual(HL_LIVE);
+  expect(blob.hyperliquid.lastUpdated).toBe("2026-06-17 09:00:00");
+  expect(blob.solana.lastUpdated).toBe("2026-06-17 09:00:00");
 });
