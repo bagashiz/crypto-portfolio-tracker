@@ -14,6 +14,8 @@ import {
   dashboardUpdateRequests,
   ZONE_B_HEADER_ROW,
   MAX_ZONE_A_ASSET_ROWS,
+  STATUS_START_COL,
+  STATUS_START_ROW,
 } from "./dashboardSheet.js";
 
 const GRID_ID = 0;
@@ -97,6 +99,93 @@ function maxZoneALabelRowIndex(reqs) {
   }
   return max;
 }
+
+// --- Per-venue refresh status block (REFRESH-04, D-04/D-05/D-06) ---
+
+// 0-based Zone A last column. Zone A uses cols A–G (1-based 1..7 -> 0-based 0..6); the
+// status block must start at or beyond 0-based 7 (col H) to sit strictly right of Zone A.
+const ZONE_A_LAST_COL_0BASED = 6; // col G
+
+// Collect every status-block label request: those whose start.columnIndex is in the
+// status columns (>= STATUS_START_COL-1) — i.e. right of Zone A's label/format ranges.
+function statusBlockRequests(reqs) {
+  const startCol0 = STATUS_START_COL - 1;
+  return reqs.filter((req) => {
+    const start = req?.updateCells?.start;
+    return start && typeof start.columnIndex === "number" && start.columnIndex >= startCol0;
+  });
+}
+
+test("build requests include the static status-block labels (LastUpdated, Stale?, both venues)", () => {
+  const serialized = JSON.stringify(dashboardBuildRequests(GRID_ID));
+  expect(serialized).toContain("LastUpdated");
+  expect(serialized).toContain("Stale?");
+  expect(serialized).toContain("Hyperliquid");
+  expect(serialized).toContain("Solana"); // matches "Solana/Jupiter"
+});
+
+test("status block is column-anchored right of Zone A (0-based columnIndex >= 7)", () => {
+  const reqs = dashboardBuildRequests(GRID_ID);
+  const statusReqs = statusBlockRequests(reqs);
+  expect(statusReqs.length).toBeGreaterThan(0);
+  // Every status request must start strictly right of Zone A's last column (0-based 6).
+  for (const req of statusReqs) {
+    expect(req.updateCells.start.columnIndex).toBeGreaterThan(ZONE_A_LAST_COL_0BASED);
+  }
+  // And the configured start column itself is right of Zone A.
+  expect(STATUS_START_COL - 1).toBeGreaterThan(ZONE_A_LAST_COL_0BASED);
+});
+
+test("update requests emit the same status labels as build (static structure: build == update)", () => {
+  const serialized = JSON.stringify(dashboardUpdateRequests(GRID_ID));
+  expect(serialized).toContain("LastUpdated");
+  expect(serialized).toContain("Stale?");
+  expect(serialized).toContain("Hyperliquid");
+  expect(serialized).toContain("Solana");
+});
+
+test("status block rows stay above Zone B's header row (no Zone B overlap)", () => {
+  const reqs = dashboardBuildRequests(GRID_ID);
+  const statusReqs = statusBlockRequests(reqs);
+  // The block occupies STATUS_START_ROW..STATUS_START_ROW+2 (header + 2 venue lines).
+  for (const req of statusReqs) {
+    expect(req.updateCells.start.rowIndex).toBeLessThan(ZONE_B_HEADER_ROW_0BASED);
+  }
+  // Tightest expected footprint: 3 rows starting at STATUS_START_ROW (1-based).
+  const maxStatusRow0 = STATUS_START_ROW - 1 + 2;
+  expect(maxStatusRow0).toBeLessThan(ZONE_B_HEADER_ROW_0BASED);
+});
+
+test("status block never intersects any zone request even at MAX_ZONE_A_ASSET_ROWS capacity", () => {
+  const full = Array.from({ length: MAX_ZONE_A_ASSET_ROWS }, (_, i) => ({ id: `FULL${i}` }));
+  const reqs = dashboardBuildRequests(GRID_ID, full);
+  const statusReqs = statusBlockRequests(reqs);
+  expect(statusReqs.length).toBeGreaterThan(0);
+  const statusCol0 = STATUS_START_COL - 1;
+  // Zone A/B requests are everything NOT in the status columns. None of them may touch
+  // the status columns — the block is column-anchored, so registry growth (which only
+  // shifts ROWS) can never collide with it.
+  for (const req of reqs) {
+    const uc = req?.updateCells?.start;
+    const rc = req?.repeatCell?.range;
+    if (uc && typeof uc.columnIndex === "number" && uc.columnIndex < statusCol0) {
+      // Zone label row: only spans its labels; cannot reach the status column.
+      const cellCount = req.updateCells.rows?.[0]?.values?.length ?? 0;
+      expect(uc.columnIndex + cellCount).toBeLessThanOrEqual(statusCol0);
+    }
+    if (rc && typeof rc.endColumnIndex === "number") {
+      // Zone number-format ranges end before the status column.
+      expect(rc.endColumnIndex).toBeLessThanOrEqual(statusCol0);
+    }
+  }
+});
+
+test("status requests are skeleton-only: no formulaValue, no addConditionalFormatRule", () => {
+  const statusReqs = statusBlockRequests(dashboardBuildRequests(GRID_ID));
+  const serialized = JSON.stringify(statusReqs);
+  expect(serialized).not.toContain("formulaValue");
+  expect(serialized).not.toContain("addConditionalFormatRule");
+});
 
 // Counts update-cells rows whose first stringValue cell equals an asset id.
 function countAssetLabelRows(reqs, assetList) {
