@@ -20,12 +20,12 @@ import { parseJupPrices, parseJupBalances } from "./JupiterApi";
 // ---------------------------------------------------------------------------
 
 /**
- * Minimal spotMetaAndAssetCtxs fixture.
+ * spotMetaAndAssetCtxs fixture mirroring the REAL API shape: `ctxs` is NOT
+ * positionally aligned with `universe` — it is longer (extra/delisted pairs)
+ * and in a different order, so the only correct join is pair `name` == ctx
+ * `coin`. A naive `ctxs[pairPos]` reads the leading decoy entries and must fail.
  * tokens: USDC=0 (quote), UBTC=1, HYPE=150, XAUT0=297.
- * universe[i] aligns positionally with ctxs[i].
- *   universe[0] = UBTC/USDC -> ctxs[0].midPx
- *   universe[1] = HYPE/USDC -> ctxs[1].midPx (mirrors HYPE @107 / pair [150,0])
- *   universe[2] = XAUT0/USDC -> ctxs[2].midPx
+ *   universe pairs: @142 = UBTC/USDC, @107 = HYPE/USDC, @182 = XAUT0/USDC.
  */
 function hlSpotMetaFixture() {
   return [
@@ -37,12 +37,21 @@ function hlSpotMetaFixture() {
         { name: "XAUT0", index: 297 },
       ],
       universe: [
-        { tokens: [1, 0], index: 50 },
-        { tokens: [150, 0], index: 107 },
-        { tokens: [297, 0], index: 199 },
+        { tokens: [1, 0], index: 50, name: "@142" },
+        { tokens: [150, 0], index: 107, name: "@107" },
+        { tokens: [297, 0], index: 199, name: "@182" },
       ],
     },
-    [{ midPx: "65000.5" }, { midPx: "42.17" }, { midPx: "2650.0" }],
+    // Decoys occupy indexes 0-2 (the positional pairPos of UBTC/HYPE/XAUT0);
+    // the real pairs sit further down. Index-based lookup would pick the decoys.
+    [
+      { coin: "@999", midPx: "0.000068" },
+      { coin: "@555", midPx: "0.09286" },
+      { coin: "@777", midPx: "0.3965" },
+      { coin: "@142", midPx: "65000.5" }, // UBTC
+      { coin: "@107", midPx: "42.17" }, // HYPE
+      { coin: "@182", midPx: "2650.0" }, // XAUT0
+    ],
   ];
 }
 
@@ -58,9 +67,23 @@ test("Hl parseHlSpotMids throws when a tracked ticker is absent from meta.tokens
   expect(() => parseHlSpotMids(hlSpotMetaFixture(), ["UBTC", "MISSING"])).toThrow();
 });
 
-test("Hl parseHlSpotMids throws when the matched pair's ctxs midPx is null (D-10)", () => {
+test("Hl parseHlSpotMids joins ctxs by coin==pair.name, NOT by array position (regression)", () => {
+  // The fixture's ctxs decoys at indexes 0-2 are the wrong (tiny) prices the
+  // live feed misalignment surfaced; a positional read would return them.
+  const out = parseHlSpotMids(hlSpotMetaFixture(), ["UBTC", "HYPE", "XAUT0"]);
+  expect(out["UBTC"]).toBe(65000.5);
+  expect(out["UBTC"]).not.toBe(0.000068);
+});
+
+test("Hl parseHlSpotMids throws when the matched pair's ctx midPx is null (D-10)", () => {
   const [meta] = hlSpotMetaFixture();
-  const body = [meta, [{ midPx: "65000.5" }, { midPx: null }, { midPx: "2650.0" }]];
+  const body = [meta, [{ coin: "@107", midPx: null }]]; // HYPE pair present but null mid
+  expect(() => parseHlSpotMids(body, ["HYPE"])).toThrow();
+});
+
+test("Hl parseHlSpotMids throws when no ctx matches the pair name (D-10)", () => {
+  const [meta] = hlSpotMetaFixture();
+  const body = [meta, [{ coin: "@999", midPx: "1.0" }]]; // no @107 entry for HYPE
   expect(() => parseHlSpotMids(body, ["HYPE"])).toThrow();
 });
 

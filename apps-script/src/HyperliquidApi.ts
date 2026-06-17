@@ -10,9 +10,12 @@
  * Prices come from SPOT, never perp (Pitfall 1): the wallet holds the bridged
  * `UBTC` spot token, NOT the perp `BTC` instrument — never query coin `BTC` for
  * the spot holding. Spot tokens are resolved by name -> token index -> the
- * `universe` pair quoted against USDC (token 0) -> the positionally-aligned
- * `ctxs[pairPos].midPx`. Indexing spot by symbol via `allMids` returns the wrong
- * (perp) mid.
+ * `universe` pair quoted against USDC (token 0) -> the ctx whose `coin` equals
+ * that pair's `name`. NOTE: `ctxs` is NOT positionally aligned with `universe`
+ * — the live feed carries extra/delisted pairs in a different order (e.g. 636
+ * ctxs vs 307 universe), so a naive `ctxs[pairPos]` reads the wrong coin's mid.
+ * Join by pair `name` == ctx `coin`, never by array index. Indexing spot by
+ * symbol via `allMids` returns the wrong (perp) mid.
  *
  * Fail-loud rules:
  *   - D-10: a tracked ticker absent from prices, or a null midPx -> throw (config).
@@ -28,12 +31,15 @@ import { getScriptProp } from "./Properties";
 
 const HL_INFO_URL = "https://api.hyperliquid.xyz/info";
 
-/** spotMetaAndAssetCtxs response: `[meta, ctxs]`, positionally aligned by pair. */
+/**
+ * spotMetaAndAssetCtxs response: `[meta, ctxs]`. `ctxs` is joined to `universe`
+ * by `coin` == pair `name` (NOT by array position — see file header).
+ */
 interface HlSpotMeta {
   tokens: { name: string; index: number }[];
-  universe: { tokens: number[]; index: number }[];
+  universe: { tokens: number[]; index: number; name: string }[];
 }
-type HlSpotCtxs = { midPx: string | null }[];
+type HlSpotCtxs = { midPx: string | null; coin: string }[];
 
 /** spotClearinghouseState response: spot balances keyed by coin. */
 interface HlClearinghouseState {
@@ -66,14 +72,15 @@ export function parseHlSpotMids(body: unknown, tickers: string[]): Record<string
       throw new Error('HL: token "' + ticker + '" not in spotMeta.tokens'); // D-10 config error
     }
     // USDC is the quote token (index 0): find the pair [tokenIndex, 0].
-    const pairPos = meta.universe.findIndex((u) => u.tokens[0] === tok.index && u.tokens[1] === 0);
-    if (pairPos < 0) {
+    const pair = meta.universe.find((u) => u.tokens[0] === tok.index && u.tokens[1] === 0);
+    if (!pair) {
       throw new Error('HL: no USDC spot pair for "' + ticker + '" (token ' + tok.index + ")"); // D-10
     }
-    const ctx = ctxs[pairPos];
+    // ctxs is NOT positionally aligned with universe — join by pair name == coin.
+    const ctx = ctxs.find((c) => c.coin === pair.name);
     const mid = ctx ? ctx.midPx : null;
     if (mid == null) {
-      throw new Error('HL: null midPx for "' + ticker + '" (pair ' + pairPos + ")"); // D-10
+      throw new Error('HL: no/null midPx for "' + ticker + '" (pair ' + pair.name + ")"); // D-10
     }
     out[ticker] = Number(mid);
   }
