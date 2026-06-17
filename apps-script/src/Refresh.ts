@@ -21,7 +21,6 @@
 import { ASSETS, type Asset, CACHE_TTL_SECONDS } from "./Config";
 import { getHyperliquidData } from "./HyperliquidApi";
 import { getJupiterData } from "./JupiterApi";
-import { getScriptProp } from "./Properties";
 
 /** CacheService blob key (D-01/D-02). One key holds both venues' last-good slices. */
 export const PRICES_ALL = "PRICES_ALL";
@@ -144,14 +143,8 @@ export function refreshAll(): void {
 
   // Read current Dashboard values FIRST so a failed venue with no cache falls
   // back to whatever the sheet already shows (D-07 cold-start, never blanks).
-  // This is a STANDALONE script (no container binding — .clasp.json has no
-  // parentId), so SpreadsheetApp.getActiveSpreadsheet() returns null. Open the
-  // target by ID from the SPREADSHEET_ID Script Property (fail-loud, same store
-  // as the wallet addresses + Jupiter key), mirroring how the layout builder
-  // targets the sheet by SPREADSHEET_ID.
-  const sheet = SpreadsheetApp.openById(getScriptProp("SPREADSHEET_ID")).getSheetByName(
-    DASHBOARD_SHEET,
-  );
+  // Container-bound script: getActiveSpreadsheet() resolves to the bound sheet.
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(DASHBOARD_SHEET);
   if (!sheet) {
     throw new Error("Dashboard sheet not found: " + DASHBOARD_SHEET);
   }
