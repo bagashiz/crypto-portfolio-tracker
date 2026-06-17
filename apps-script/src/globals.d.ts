@@ -7,11 +7,6 @@
 import type { Asset } from "./Config";
 
 declare global {
-  // eslint-disable-next-line no-var
-  var hello: () => string;
-  // testApi() runs both providers live and logs their {price, qty} maps (D-12).
-  // eslint-disable-next-line no-var
-  var testApi: () => void;
   // The inlined shared asset registry (D-05), exposed for provider/refresh code.
   // eslint-disable-next-line no-var
   var ASSETS: readonly Asset[];
