@@ -135,8 +135,16 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 > **Scope note (Phase 5 CONTEXT, 2026-06-19):** APY %, per-asset Monthly Yield, and total Monthly Yield were **scratched** from the Dashboard during discussion — SC#5's original "APY, and monthly yield … total monthly yield" wording is intentionally reduced to risk-only allocation health. The `apy` field in `assets.json` is now vestigial (unused by the dashboard), left in place to avoid cross-runtime churn. SELL/realized-PnL handling moved to Phase 6 — Phase 5 cost basis is BUY-only.
 
-**Plans**: TBD
-**UI hint**: yes
+**Plans**: 3 plans
+
+**Wave 1**
+
+- [ ] 05-01-PLAN.md — DCA Log BUY-only cost-basis summary formulas (SUMIFS/COUNTIFS/MAXIFS, IFERROR em-dash) + inverted skeleton test, data-region-safe (PNL-01, PNL-02)
+- [ ] 05-02-PLAN.md — Dashboard PnL formulas + allocation health (Value=B*C, AvgCost cross-sheet ref, PnL $/%, Actual %/Drift, SUMPRODUCT blended risk) + green/red conditional formatting (idempotent) + status-block relocation to col K + inverted dashboard test (PNL-03, PNL-04, ALLOC-01, ALLOC-02)
+
+**Wave 2** *(depends on 05-02 — must match the chosen STATUS_START_COL)*
+
+- [ ] 05-03-PLAN.md — Apps Script Refresh.ts cross-runtime move: STATUS_LASTUPDATED_COL 10→12 (matches status block at col K) + re-confirm Qty/Price-only write (Value col D excluded, now a formula) + Refresh test assertions (PNL-03)
 
 ## Progress
 
@@ -149,7 +157,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 2. Layout Builder | 3/3 | Complete    | 2026-06-16 |
 | 3. Data Layer | 3/3 | Complete    | 2026-06-17 |
 | 4. Refresh & Caching | 3/3 | Complete    | 2026-06-17 |
-| 5. PnL & Allocation | 0/TBD | Not started | - |
+| 5. PnL & Allocation | 0/3 | Not started | - |
 | 6. Realized PnL & Sell Log | 0/TBD | Not started | - |
 
 ### Phase 6: Realized PnL & Sell Log
