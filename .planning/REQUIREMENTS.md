@@ -42,10 +42,14 @@ Requirements for the initial release. Each maps to a roadmap phase.
 - [ ] **PNL-03**: The Dashboard shows unrealized P&L in USD (`Value − Qty × AvgCost`) and P&L %
 - [ ] **PNL-04**: P&L cells are color-coded via conditional formatting (green for gains, red for losses)
 
+### Realized PnL
+
+- [ ] **PNL-05**: User can log SELL transactions in the DCA Log and see realized PnL per asset (sale proceeds vs DCA-weighted cost basis), without breaking the BUY-only avg-cost summary (promoted from v2 — own phase, Phase 6)
+
 ### Allocation Health
 
 - [ ] **ALLOC-01**: The allocation zone shows target %, actual %, and drift per asset
-- [ ] **ALLOC-02**: The allocation zone shows risk score, APY, and monthly yield per asset, with a totals row (target sum, blended risk via `SUMPRODUCT`, total monthly yield)
+- [ ] **ALLOC-02**: The allocation zone shows risk score per asset, with a totals row (target sum, blended risk via `SUMPRODUCT`) _(APY and monthly yield scratched in Phase 5 discussion 2026-06-19 — see Phase 5 CONTEXT)_
 
 ### Security & Secrets
 
@@ -59,8 +63,9 @@ Deferred to a future release. Tracked but not in the current roadmap.
 
 ### PnL
 
-- **PNL-05**: Realized PnL from SELL transactions
 - **PNL-06**: Data-validation dropdowns on the DCA Log (Asset, Type) if not delivered in v1
+
+> **PNL-05** (Realized PnL from SELL transactions) promoted to v1 — now tracked under Realized PnL above, scoped to Phase 6.
 
 ## Out of Scope
 
@@ -102,11 +107,12 @@ Which phases cover which requirements. Populated during roadmap creation.
 | PNL-04 | Phase 5 | Pending |
 | ALLOC-01 | Phase 5 | Pending |
 | ALLOC-02 | Phase 5 | Pending |
+| PNL-05 | Phase 6 | Pending |
 
 **Coverage:**
 
-- v1 requirements: 22 total (21 active + 1 descoped: DATA-04)
-- Mapped to phases: 22
+- v1 requirements: 23 total (22 active + 1 descoped: DATA-04)
+- Mapped to phases: 23
 - Unmapped: 0
 
 ---

@@ -7,11 +7,11 @@ stopped_at: 04-03 Task 2 — live human-verify checkpoint (refreshAll/trigger/de
 last_updated: "2026-06-17T15:14:24.744Z"
 last_activity: 2026-06-17
 progress:
-  total_phases: 5
+  total_phases: 6
   completed_phases: 4
   total_plans: 11
   completed_plans: 11
-  percent: 80
+  percent: 67
 ---
 
 # Project State
@@ -77,6 +77,10 @@ Recent decisions affecting current work:
 
 None yet.
 
+### Roadmap Evolution
+
+- Phase 6 added: Realized PnL & Sell Log (SELL transactions + realized PnL per asset); splits SELL semantics out of Phase 5's BUY-only unrealized PnL; promotes PNL-05 from v2 (2026-06-19, during Phase 5 discussion)
+
 ### Blockers/Concerns
 
 - Phase 3 blocker (pre-build): Four Solana mint addresses (IVVon, PST, ONyc, USDy) and exact Hyperliquid XAUt ticker are unconfirmed — fail silently if wrong. Confirm before implementing provider modules.
@@ -86,7 +90,7 @@ None yet.
 
 | Category | Item | Status | Deferred At |
 |----------|------|--------|-------------|
-| PnL | Realized PnL (PNL-05) | v2 | Roadmap init |
+| PnL | Realized PnL (PNL-05) | Promoted to v1 → Phase 6 (2026-06-19) | Roadmap init |
 | DCA Log | Data-validation dropdowns (PNL-06) | v2 | Roadmap init |
 
 ## Session Continuity

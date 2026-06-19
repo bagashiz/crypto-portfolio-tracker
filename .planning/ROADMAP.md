@@ -18,6 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Data Layer** - Apps Script provider modules (Hyperliquid spot, Jupiter prices + Jupiter Ultra balances) with the Jupiter key and wallet config wired via PropertiesService (completed 2026-06-17)
 - [x] **Phase 4: Refresh & Caching** - Time-driven trigger runs batched writes with blob cache and graceful degradation per provider (completed 2026-06-17)
 - [ ] **Phase 5: PnL & Allocation** - DCA log, cost-basis summary block, unrealized P&L display with color coding, and allocation health zone
+- [ ] **Phase 6: Realized PnL & Sell Log** - SELL transaction handling in the DCA Log and realized PnL per asset (proceeds vs DCA cost basis), separate from Phase 5's BUY-only unrealized PnL
 
 ## Phase Details
 
@@ -130,7 +131,9 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. The DCA Log summary block shows total invested, total qty, DCA-weighted average cost, buy count, last buy date, and total fees per asset — and is the only place this computation lives
   3. The Dashboard shows unrealized P&L in USD and % for each asset, calculated as `Value − Qty × AvgCost`, and these values match manual spot-check arithmetic
   4. P&L cells are visually green for gains and red for losses via conditional formatting, visible without any manual formatting step
-  5. The allocation zone shows target %, actual %, drift, risk score, APY, and monthly yield per asset, plus a totals row with blended risk via `SUMPRODUCT` and total monthly yield
+  5. The allocation zone shows target %, actual %, drift, and risk score per asset, plus a totals row with the target sum and blended risk via `SUMPRODUCT`
+
+> **Scope note (Phase 5 CONTEXT, 2026-06-19):** APY %, per-asset Monthly Yield, and total Monthly Yield were **scratched** from the Dashboard during discussion — SC#5's original "APY, and monthly yield … total monthly yield" wording is intentionally reduced to risk-only allocation health. The `apy` field in `assets.json` is now vestigial (unused by the dashboard), left in place to avoid cross-runtime churn. SELL/realized-PnL handling moved to Phase 6 — Phase 5 cost basis is BUY-only.
 
 **Plans**: TBD
 **UI hint**: yes
@@ -138,7 +141,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -147,3 +150,17 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 3. Data Layer | 3/3 | Complete    | 2026-06-17 |
 | 4. Refresh & Caching | 3/3 | Complete    | 2026-06-17 |
 | 5. PnL & Allocation | 0/TBD | Not started | - |
+| 6. Realized PnL & Sell Log | 0/TBD | Not started | - |
+
+### Phase 6: Realized PnL & Sell Log
+
+**Goal:** A user can log SELL transactions in the DCA Log and see realized PnL per asset (sale proceeds vs DCA-weighted cost basis) alongside the existing unrealized PnL, without breaking Phase 5's BUY-only average-cost summary block.
+**Requirements**: PNL-05 (promoted from v2)
+**Depends on:** Phase 5
+**Plans:** 0 plans
+
+> **Scope note:** Phase 5 deliberately scopes cost basis to BUY rows only (Type=BUY filter) — SELL rows are ignored by the avg-cost/unrealized-PnL summary. Phase 6 introduces SELL semantics: realized PnL (proceeds − cost basis of units sold) per asset, and how SELL rows interact with the BUY-only average. Splitting this out keeps Phase 5's irreversible-data-loss-sensitive layout work focused on unrealized PnL.
+
+Plans:
+
+- [ ] TBD (run /gsd-plan-phase 6 to break down)

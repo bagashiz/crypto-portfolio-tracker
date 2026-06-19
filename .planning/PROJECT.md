@@ -29,7 +29,7 @@ See accurate unrealized PnL — live portfolio value measured against DCA-weight
 - [ ] Layout builder `--update` is idempotent — re-applies structure/formats/formulas without ever touching the DCA Log data rows
 - [ ] DCA Log tab → DCA-weighted average cost basis per asset (single source of truth)
 - [ ] Dashboard shows unrealized P&L in USD and %, color-coded (green/red conditional formatting)
-- [ ] Allocation health zone: target %, actual %, drift, risk score, APY, monthly yield
+- [ ] Allocation health zone: target %, actual %, drift, risk score (APY % + monthly yield scratched in Phase 5 discussion 2026-06-19)
 
 ### Out of Scope
 
