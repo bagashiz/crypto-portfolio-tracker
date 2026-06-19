@@ -155,6 +155,89 @@ function numberFormatRequest(sheetId, startRow, endRow, startCol, endCol, number
   };
 }
 
+// --- Conditional formatting (D-07) — NEW request type, no prior analog ---
+
+// Light green / light red background fills (background-fill, not text color, D-07).
+const GREEN_FILL = { red: 0.72, green: 0.88, blue: 0.74 };
+const RED_FILL = { red: 0.96, green: 0.8, blue: 0.8 };
+
+// Drift tolerance (D-07, Claude's discretion): flag when |drift| >= 0.05 (5 percentage
+// points absolute). Drift values are fractions (Actual % − Target %), so 0.05 = 5pp.
+const DRIFT_TOLERANCE = 0.05;
+
+// addConditionalFormatRule request (Sheets v4). `condition` is a BooleanCondition
+// (e.g. NUMBER_GREATER / NUMBER_LESS / CUSTOM_FORMULA); `fill` is a backgroundColor RGB.
+// `range` is a 0-based GridRange. `index` positions the rule (managed rules are 0..N-1).
+function addConditionalFormatRuleRequest(sheetId, range, condition, fill, index) {
+  return {
+    addConditionalFormatRule: {
+      rule: {
+        ranges: [{ sheetId, ...range }],
+        booleanRule: { condition, format: { backgroundColor: fill } },
+      },
+      index,
+    },
+  };
+}
+
+// deleteConditionalFormatRule at a given 0-based index on a sheet (idempotency, D-07).
+function deleteConditionalFormatRuleRequest(sheetId, index) {
+  return { deleteConditionalFormatRule: { sheetId, index } };
+}
+
+// The Dashboard conditional-format rules (D-07): green PnL>0 / red PnL<0 on cols H+I
+// over Zone A asset rows, plus a red |drift|>=tolerance flag on Zone B col D. Emitted in
+// BOTH --build and --update. IDEMPOTENCY: addConditionalFormatRule STACKS on naive
+// re-add, so we emit deleteConditionalFormatRule for the managed indices FIRST, in
+// DESCENDING order ([N-1 .. 0]). Each delete at the current top index removes one managed
+// rule; descending order keeps the remaining target indices stable. On a fresh --build
+// (no rules) the deletes target indices that don't exist yet — the build/update flow in
+// index.js tolerates "no rule at index" so the pre-clear is a safe no-op on first run, and
+// re-running --update always converges to exactly MANAGED_RULE_COUNT rules (never grows).
+// 3 managed rules: green PnL>0 (H+I), red PnL<0 (H+I), red Drift |d|>=tol (Zone B D).
+// Each rule spans its full column range, so PnL is one green + one red rule (not per-col).
+const MANAGED_RULE_COUNT = 3;
+
+function conditionalFormatRequests(sheetId, zoneAFirstAssetRow, zoneATotalRow, zoneBFirstAssetRow, zoneBTotalsRow) {
+  const requests = [];
+
+  // Pre-clear managed rules in DESCENDING index order so re-running --update never stacks.
+  for (let i = MANAGED_RULE_COUNT - 1; i >= 0; i--) {
+    requests.push(deleteConditionalFormatRuleRequest(sheetId, i));
+  }
+
+  // Zone A PnL $ (col H = 0-based 7) + PnL % (col I = 0-based 8) over per-asset rows.
+  // 0-based row span: [zoneAFirstAssetRow-1 .. zoneATotalRow-1) (excludes the TOTAL row).
+  const pnlRange = {
+    startRowIndex: zoneAFirstAssetRow - 1,
+    endRowIndex: zoneATotalRow - 1,
+    startColumnIndex: 7, // col H
+    endColumnIndex: 9, // exclusive → cols H, I
+  };
+  const greaterThanZero = { type: "NUMBER_GREATER", values: [{ userEnteredValue: "0" }] };
+  const lessThanZero = { type: "NUMBER_LESS", values: [{ userEnteredValue: "0" }] };
+  // Indices 0..1: green (PnL>0) then red (PnL<0). 0 / em-dash text get no fill.
+  requests.push(addConditionalFormatRuleRequest(sheetId, pnlRange, greaterThanZero, GREEN_FILL, 0));
+  requests.push(addConditionalFormatRuleRequest(sheetId, pnlRange, lessThanZero, RED_FILL, 1));
+
+  // Zone B Drift (col D = 0-based 3) over per-asset rows: red when |drift| >= tolerance.
+  // CUSTOM_FORMULA references the first cell of the range (D{firstZoneBrow}); Sheets
+  // applies it relatively down the range. em-dash text in Drift → ABS errors → no fill.
+  const driftRange = {
+    startRowIndex: zoneBFirstAssetRow - 1,
+    endRowIndex: zoneBTotalsRow - 1,
+    startColumnIndex: 3, // col D
+    endColumnIndex: 4, // exclusive → col D only
+  };
+  const driftCustom = {
+    type: "CUSTOM_FORMULA",
+    values: [{ userEnteredValue: `=ABS(D${zoneBFirstAssetRow})>=${DRIFT_TOLERANCE}` }],
+  };
+  requests.push(addConditionalFormatRuleRequest(sheetId, driftRange, driftCustom, RED_FILL, 2));
+
+  return requests;
+}
+
 // Freeze the top header row of the sheet.
 function freezeHeaderRequest(sheetId) {
   return {
@@ -308,6 +391,13 @@ function structuralRequests(sheetId, assetList = assets) {
   STATUS_VENUE_LINES.forEach((venue, i) => {
     requests.push(labelRowRequest(sheetId, STATUS_START_ROW + 1 + i, STATUS_START_COL, [venue]));
   });
+
+  // Conditional-format rules (D-07): green/red PnL fills (Zone A H+I) + red Drift flag
+  // (Zone B D), with delete-then-add idempotency so --update never stacks duplicates.
+  // Emitted in BOTH build and update (structuralRequests is shared by both).
+  requests.push(
+    ...conditionalFormatRequests(sheetId, zoneAFirstAssetRow, zoneATotalRow, zoneBFirstAssetRow, zoneBTotalsRow)
+  );
 
   return requests;
 }
