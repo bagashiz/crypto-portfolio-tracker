@@ -84,3 +84,11 @@ Task 1 was marked `tdd="true"`. This plan splits implementation (Task 1, `feat`)
 
 - Plan 02 (Dashboard) must reference this summary block's Avg Cost cell for each asset's `AvgCost` (col G) — do NOT duplicate SUMIF logic (D-03). The Avg Cost cell is at DCA Log column D, summary row = `FIRST_SUMMARY_ROW + assetIndex` (row 2 for the first asset).
 - The status-block relocation (D-01) and `Value`-as-formula change (D-02) are NOT in this plan — they belong to the Dashboard/Refresh plans in this wave.
+
+## Self-Check: PASSED
+
+- FOUND: `.planning/phases/05-pnl-allocation/05-01-SUMMARY.md`
+- FOUND commit 2113826 (feat — summary formulas)
+- FOUND commit bfecb35 (test — inverted skeleton assertion)
+- FOUND commit 67963ec (docs — SUMMARY.md)
+- Working tree clean
