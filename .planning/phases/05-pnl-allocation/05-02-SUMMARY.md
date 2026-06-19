@@ -103,6 +103,10 @@ None - no external service configuration required. (This plan only changes the l
 - Plan 03 (Refresh.ts) must set `STATUS_LASTUPDATED_COL = 12` (col L) and `Stale?` = col M to match the relocated status block, and must NOT write Value col D (it is now a formula). The Qty/Price write already spans only B:C.
 - The DCA Log summary Avg Cost cell (`'DCA Log'!$D$2..`) is referenced but its SUMIFS formulas are written by the DCA Log plan in this phase — the cross-sheet reference resolves once that summary block is populated.
 
+## Self-Check: PASSED
+
+All modified files exist on disk and all task + metadata commits are present in git history (dae5a55, 7b141f8, 31f9339, 7fe3334). Full repo test suite passes (64 tests, exit 0); working tree clean.
+
 ---
 *Phase: 05-pnl-allocation*
 *Completed: 2026-06-19*
