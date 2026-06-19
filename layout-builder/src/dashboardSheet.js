@@ -8,21 +8,38 @@
 //   Zone A — Live Holdings:     rows 1-10  (header row 1, per-asset rows, TOTAL row 10)
 //   Zone B — Allocation Health: rows 12-21 (header row 12, per-asset rows, TOTALS row 21)
 //
-// SKELETON ONLY (D-08): header/label text, frozen header row, and number formats.
-// NO formulas (`userEnteredValue.formulaValue`) and NO conditional formatting
-// (`addConditionalFormatRule`) — those land in Phase 5, which extends this file.
+// PHASE 5 (PnL & Allocation): this file now emits formula cells
+// (`userEnteredValue.formulaValue`) and conditional-format rules
+// (`addConditionalFormatRule`) on top of the Phase 2 skeleton — Zone A unrealized
+// PnL (PNL-03) with green/red background fills (PNL-04), and Zone B allocation
+// health (target/actual/drift/risk + blended-risk totals, ALLOC-01/ALLOC-02).
+// The Dashboard has no protected data region, so build == update for formulas;
+// conditional-format rules are made idempotent via delete-then-add (D-07).
 
-import { assets, DASHBOARD } from "./config.js";
+import { assets, DASHBOARD, DCA_LOG } from "./config.js";
+
+// DCA Log summary geometry (single source of truth for Avg Cost, D-03). The DCA Log
+// summary block (see dcaLogSheet.js) places one per-asset summary row at
+// FIRST_SUMMARY_ROW + i (1-based 2 + i), in assets.json order, and Avg Cost (DCA) is
+// summary column D. The Dashboard AvgCost cell references that cell cross-sheet rather
+// than re-deriving the SUMIF (PROJECT.md Key Decision: single source of truth).
+const DCA_LOG_FIRST_SUMMARY_ROW = 2; // mirrors dcaLogSheet.js FIRST_SUMMARY_ROW
+const DCA_LOG_AVGCOST_COL = "D"; // Avg Cost (DCA) is summary col D in dcaLogSheet.js
 
 // --- Layout constants (Claude's discretion, derived from STRUCTURE.md, D-41) ---
 
-// Zone A — Live Holdings.
+// Zone A — Live Holdings (D-01: APY % dropped; AvgCost/PnL $/PnL % added → cols A..I).
 const ZONE_A_HEADER_ROW = 1; // 1-based
-const ZONE_A_HEADERS = ["Asset", "Qty", "Price", "Value", "Target %", "Risk", "APY %"];
+const ZONE_A_HEADERS = ["Asset", "Qty", "Price", "Value", "Target %", "Risk", "AvgCost", "PnL $", "PnL %"];
 
 // Zone B — Allocation Health (blank row 11 separates the zones).
+// D-05: APY % and Monthly Yield dropped everywhere → cols A..E.
 const ZONE_B_HEADER_ROW = 12; // 1-based
-const ZONE_B_HEADERS = ["Asset", "Target %", "Actual %", "Drift", "Risk", "APY %", "Monthly Yield"];
+const ZONE_B_HEADERS = ["Asset", "Target %", "Actual %", "Drift", "Risk"];
+
+// Em-dash empty state (D-06): leaf/aggregate formulas wrap IFERROR(…, EMPTY_STATE) so
+// an asset with no BUY rows reads "—" rather than #DIV/0!.
+const EMPTY_STATE = '"—"';
 
 // Maximum Zone A per-asset rows before Zone A's TOTAL row would collide with Zone B's
 // pinned header. Zone A occupies rows 1..(2 + assets.length); the TOTAL row lands at
@@ -38,14 +55,19 @@ const MAX_ZONE_A_ASSET_ROWS = ZONE_B_HEADER_ROW - 3; // = 9
 // labels here (venue names + header row); refreshAll() in Apps Script writes the dynamic
 // timestamp + Stale? VALUES into the adjacent cells (D-05 build-time/run-time split).
 //
-// Exact geometry (so Plan 01's refreshAll() targets the matching cells):
-//   Col I (1-based 9) = STATUS_START_COL: venue label   ("Status" / "Hyperliquid" / "Solana/Jupiter")
-//   Col J (1-based 10)                  : LastUpdated    (header static; value rows filled by refreshAll)
-//   Col K (1-based 11)                  : Stale?         (header static; value rows filled by refreshAll)
+// D-01 RELOCATION: Zone A now widens to col I (1-based 9). The status block moves
+// right of col I with a one-column gap → STATUS_START_COL = 11 (col K). This is the
+// cross-runtime geometry value Plan 03 (Refresh.ts) MUST match:
+//   Refresh.ts STATUS_LASTUPDATED_COL = STATUS_START_COL + 1 = 12 (col L), Stale? = 13 (col M).
+//
+// Exact geometry (so refreshAll() targets the matching cells):
+//   Col K (1-based 11) = STATUS_START_COL: venue label  ("Status" / "Hyperliquid" / "Solana/Jupiter")
+//   Col L (1-based 12)                   : LastUpdated   (header static; value rows filled by refreshAll)
+//   Col M (1-based 13)                   : Stale?        (header static; value rows filled by refreshAll)
 //   Row 1 (STATUS_START_ROW) = header row: ["Status", "LastUpdated", "Stale?"]
-//   Row 2                    = Hyperliquid line:   ["Hyperliquid"]    (J2/K2 filled by refreshAll)
-//   Row 3                    = Solana/Jupiter line:["Solana/Jupiter"] (J3/K3 filled by refreshAll)
-const STATUS_START_COL = 9; // 1-based col I — right of Zone A's last col G (=7)
+//   Row 2                    = Hyperliquid line:   ["Hyperliquid"]    (L2/M2 filled by refreshAll)
+//   Row 3                    = Solana/Jupiter line:["Solana/Jupiter"] (L3/M3 filled by refreshAll)
+const STATUS_START_COL = 11; // 1-based col K — one-col gap right of new Zone A last col I (=9)
 const STATUS_START_ROW = 1; // 1-based row 1 — top-right, above Zone B's header row (12)
 const STATUS_HEADERS = ["Status", "LastUpdated", "Stale?"];
 const STATUS_VENUE_LINES = ["Hyperliquid", "Solana/Jupiter"];
@@ -54,10 +76,50 @@ const STATUS_VENUE_LINES = ["Hyperliquid", "Solana/Jupiter"];
 const PERCENT_FORMAT = { type: "PERCENT", pattern: "0.00%" };
 const CURRENCY_FORMAT = { type: "CURRENCY", pattern: "$#,##0.00" };
 
-// --- Small request helpers (kept local; no formulas ever emitted) ---
+// --- Small request helpers ---
 
 function stringCell(value) {
   return { userEnteredValue: { stringValue: value } };
+}
+
+// Formula cell — mirrors stringCell but emits userEnteredValue.formulaValue (D-02/D-03).
+// `formula` must begin with "=" (Sheets treats formulaValue as a formula expression).
+function formulaCell(formula) {
+  return { userEnteredValue: { formulaValue: formula } };
+}
+
+// updateCells request writing a single row of formula cells starting at (row, startCol).
+// Mirrors labelRowRequest; `row`/`startCol` are 1-based and converted to 0-based here.
+function formulaRowRequest(sheetId, row, startCol, formulas) {
+  return {
+    updateCells: {
+      fields: "userEnteredValue",
+      start: { sheetId, rowIndex: row - 1, columnIndex: startCol - 1 },
+      rows: [{ values: formulas.map(formulaCell) }],
+    },
+  };
+}
+
+// Single-cell formula request at (row, col) (1-based). Used where only one cell in a row
+// gets a formula (e.g. Zone A TOTAL Value, Zone B blended-risk) and the surrounding cells
+// must stay untouched (notably Qty(B)/Price(C), written by refreshAll()).
+function formulaCellRequest(sheetId, row, col, formula) {
+  return formulaRowRequest(sheetId, row, col, [formula]);
+}
+
+// Static numeric value cell — for Target %/Risk pulled from assets.json (NOT formulas).
+function numberCell(value) {
+  return { userEnteredValue: { numberValue: value } };
+}
+
+function numberCellRequest(sheetId, row, col, value) {
+  return {
+    updateCells: {
+      fields: "userEnteredValue",
+      start: { sheetId, rowIndex: row - 1, columnIndex: col - 1 },
+      rows: [{ values: [numberCell(value)] }],
+    },
+  };
 }
 
 // updateCells request writing a single row of string labels starting at (row, startCol).
@@ -128,32 +190,114 @@ function structuralRequests(sheetId, assetList = assets) {
   requests.push(freezeHeaderRequest(sheetId));
 
   // Zone A header + per-asset rows + TOTAL row.
+  //
+  // Per-asset row layout (D-01/D-02/D-03/D-06), cols A..I:
+  //   A Asset    — label (asset id)
+  //   B Qty      — LEFT EMPTY (refreshAll() writes the live on-chain qty)
+  //   C Price    — LEFT EMPTY (refreshAll() writes the live price)
+  //   D Value    — formula =B{r}*C{r}                         (D-02; never refresh-written)
+  //   E Target % — static value from assets.json asset.target
+  //   F Risk     — static value from assets.json asset.risk
+  //   G AvgCost  — cross-sheet ref to the DCA Log summary Avg Cost cell (D-03, single source)
+  //   H PnL $    — =IFERROR(D{r}-B{r}*G{r},"—")               (D-02/D-06)
+  //   I PnL %    — =IFERROR((D{r}-B{r}*G{r})/(B{r}*G{r}),"—") (D-02/D-06)
   requests.push(labelRowRequest(sheetId, ZONE_A_HEADER_ROW, 1, ZONE_A_HEADERS));
+  const zoneAFirstAssetRow = ZONE_A_HEADER_ROW + 1;
   assetList.forEach((asset, i) => {
-    const row = ZONE_A_HEADER_ROW + 1 + i;
-    // First column is the asset id; remaining cells stay empty (filled by Phase 5).
+    const row = zoneAFirstAssetRow + i;
+    // A: asset id label. B/C stay EMPTY for refreshAll() (do NOT emit a value).
     requests.push(labelRowRequest(sheetId, row, 1, [asset.id]));
+    // D: Value = Qty*Price (formula, not a refresh-written value).
+    requests.push(formulaCellRequest(sheetId, row, 4, `=B${row}*C${row}`));
+    // E/F: static target/risk from the registry.
+    requests.push(numberCellRequest(sheetId, row, 5, asset.target));
+    requests.push(numberCellRequest(sheetId, row, 6, asset.risk));
+    // G: AvgCost references the DCA Log summary Avg Cost cell for this asset.
+    // DCA Log summary row for asset i is DCA_LOG_FIRST_SUMMARY_ROW + i (1-based), Avg Cost
+    // is summary col D. Sheet name quoted (contains a space); referenced from config (DCA_LOG).
+    const dcaSummaryRow = DCA_LOG_FIRST_SUMMARY_ROW + i;
+    const avgCostRef = `'${DCA_LOG}'!$${DCA_LOG_AVGCOST_COL}$${dcaSummaryRow}`;
+    requests.push(formulaCellRequest(sheetId, row, 7, `=IFERROR(${avgCostRef},${EMPTY_STATE})`));
+    // H: PnL $ = Value - Qty*AvgCost.
+    requests.push(formulaCellRequest(sheetId, row, 8, `=IFERROR(D${row}-B${row}*G${row},${EMPTY_STATE})`));
+    // I: PnL % = (Value - Qty*AvgCost) / (Qty*AvgCost).
+    requests.push(
+      formulaCellRequest(sheetId, row, 9, `=IFERROR((D${row}-B${row}*G${row})/(B${row}*G${row}),${EMPTY_STATE})`)
+    );
   });
   const zoneATotalRow = ZONE_A_HEADER_ROW + 1 + assetList.length;
+  const zoneALastAssetRow = zoneATotalRow - 1;
   requests.push(labelRowRequest(sheetId, zoneATotalRow, 1, ["TOTAL"]));
+  // TOTAL Value (D): sum of the per-asset Value cells — drives Zone B Actual %.
+  requests.push(
+    formulaCellRequest(
+      sheetId,
+      zoneATotalRow,
+      4,
+      `=IFERROR(SUM(D${zoneAFirstAssetRow}:D${zoneALastAssetRow}),${EMPTY_STATE})`
+    )
+  );
 
-  // Zone A number formats: Price/Value currency (cols C-D), Target/APY percent.
-  requests.push(numberFormatRequest(sheetId, ZONE_A_HEADER_ROW + 1, zoneATotalRow, 3, 4, CURRENCY_FORMAT));
-  requests.push(numberFormatRequest(sheetId, ZONE_A_HEADER_ROW + 1, zoneATotalRow, 5, 5, PERCENT_FORMAT));
-  requests.push(numberFormatRequest(sheetId, ZONE_A_HEADER_ROW + 1, zoneATotalRow, 7, 7, PERCENT_FORMAT));
+  // Zone A number formats: Price/Value currency (cols C-D), Target % percent (E),
+  // AvgCost + PnL $ currency (G-H), PnL % percent (I).
+  requests.push(numberFormatRequest(sheetId, zoneAFirstAssetRow, zoneATotalRow, 3, 4, CURRENCY_FORMAT));
+  requests.push(numberFormatRequest(sheetId, zoneAFirstAssetRow, zoneATotalRow, 5, 5, PERCENT_FORMAT));
+  requests.push(numberFormatRequest(sheetId, zoneAFirstAssetRow, zoneATotalRow, 7, 8, CURRENCY_FORMAT));
+  requests.push(numberFormatRequest(sheetId, zoneAFirstAssetRow, zoneATotalRow, 9, 9, PERCENT_FORMAT));
 
   // Zone B header + per-asset rows + TOTALS row.
+  //
+  // Per-asset row layout (D-05/D-06), cols A..E:
+  //   A Asset    — label (asset id)
+  //   B Target % — static value from assets.json asset.target
+  //   C Actual % — =IFERROR(<asset Zone A Value>/<Zone A TOTAL Value>,"—")
+  //   D Drift    — =IFERROR(C{r}-B{r},"—")
+  //   E Risk     — static value from assets.json asset.risk
   requests.push(labelRowRequest(sheetId, ZONE_B_HEADER_ROW, 1, ZONE_B_HEADERS));
+  const zoneBFirstAssetRow = ZONE_B_HEADER_ROW + 1;
   assetList.forEach((asset, i) => {
-    const row = ZONE_B_HEADER_ROW + 1 + i;
+    const row = zoneBFirstAssetRow + i;
+    // A: asset id label.
     requests.push(labelRowRequest(sheetId, row, 1, [asset.id]));
+    // B: static target.
+    requests.push(numberCellRequest(sheetId, row, 2, asset.target));
+    // C: Actual % = this asset's Zone A Value / Zone A TOTAL Value (same-sheet refs).
+    const zoneAValueCell = `$D$${zoneAFirstAssetRow + i}`;
+    const zoneATotalValueCell = `$D$${zoneATotalRow}`;
+    requests.push(
+      formulaCellRequest(sheetId, row, 3, `=IFERROR(${zoneAValueCell}/${zoneATotalValueCell},${EMPTY_STATE})`)
+    );
+    // D: Drift = Actual % - Target %.
+    requests.push(formulaCellRequest(sheetId, row, 4, `=IFERROR(C${row}-B${row},${EMPTY_STATE})`));
+    // E: static risk.
+    requests.push(numberCellRequest(sheetId, row, 5, asset.risk));
   });
   const zoneBTotalsRow = ZONE_B_HEADER_ROW + 1 + assetList.length;
+  const zoneBLastAssetRow = zoneBTotalsRow - 1;
   requests.push(labelRowRequest(sheetId, zoneBTotalsRow, 1, ["TOTALS"]));
+  // TOTALS Target sum (B).
+  requests.push(
+    formulaCellRequest(
+      sheetId,
+      zoneBTotalsRow,
+      2,
+      `=IFERROR(SUM(B${zoneBFirstAssetRow}:B${zoneBLastAssetRow}),${EMPTY_STATE})`
+    )
+  );
+  // TOTALS blended Risk (E): SUMPRODUCT(Risk, Actual%) with IFERROR(Actual%,0) guard so
+  // em-dash text in Actual % is treated as 0 and never propagates (D-06).
+  requests.push(
+    formulaCellRequest(
+      sheetId,
+      zoneBTotalsRow,
+      5,
+      `=IFERROR(SUMPRODUCT(E${zoneBFirstAssetRow}:E${zoneBLastAssetRow},` +
+        `IFERROR(C${zoneBFirstAssetRow}:C${zoneBLastAssetRow},0)),${EMPTY_STATE})`
+    )
+  );
 
-  // Zone B number formats: Target/Actual/Drift/APY percent.
-  requests.push(numberFormatRequest(sheetId, ZONE_B_HEADER_ROW + 1, zoneBTotalsRow, 2, 4, PERCENT_FORMAT));
-  requests.push(numberFormatRequest(sheetId, ZONE_B_HEADER_ROW + 1, zoneBTotalsRow, 6, 6, PERCENT_FORMAT));
+  // Zone B number formats: Target/Actual/Drift percent (cols B-D); Risk (E) stays plain.
+  requests.push(numberFormatRequest(sheetId, zoneBFirstAssetRow, zoneBTotalsRow, 2, 4, PERCENT_FORMAT));
 
   // Per-venue refresh status block — STATIC labels only (D-05). Column-anchored at
   // STATUS_START_COL so it is immune to the row-shifting MAX_ZONE_A_ASSET_ROWS guard.
@@ -184,6 +328,10 @@ export function dashboardUpdateRequests(sheetId, assetList = assets) {
 // Re-export the Zone B header row and Zone A cap so tests can assert the no-collision
 // invariant (zoneATotalRow < ZONE_B_HEADER_ROW) without recomputing the magic literal.
 export { ZONE_B_HEADER_ROW, MAX_ZONE_A_ASSET_ROWS };
+
+// Re-export the Zone A/B header arrays so tests can assert the widened/reduced column
+// maps (D-01/D-05) without re-deriving the literals.
+export { ZONE_A_HEADERS, ZONE_B_HEADERS };
 
 // Re-export the status-block placement constants so tests can assert column-anchoring
 // (right of Zone A) and non-collision with the zones without re-deriving the literals.
