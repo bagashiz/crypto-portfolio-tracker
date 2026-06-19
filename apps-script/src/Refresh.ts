@@ -133,16 +133,34 @@ export function backfillBlobFromSheet(
 const DASHBOARD_SHEET = "Dashboard";
 /** Zone A header is row 1; per-asset rows start at row 2 (1-based). */
 const ZONE_A_FIRST_ASSET_ROW = 2;
-/** Qty is column B (2), Price is column C (3) — the only cols this write spans (D-10). */
-const QTY_COL = 2;
-/** The single setValues block is 2 columns wide: Qty(B), Price(C). */
-const VALUE_COLS = 2;
+/**
+ * Qty is column B (2), Price is column C (3) — the only cols this write spans (D-10).
+ * Value (col D) is intentionally EXCLUDED: it is a `=B*C` formula owned by the layout
+ * builder (D-02), so refreshAll() must never write into D or it would clobber the
+ * formula and #VALUE-cascade the PnL math (T-05-06). Exported so the cross-runtime
+ * geometry test can assert the 2-col Qty/Price width.
+ */
+export const QTY_COL = 2;
+/**
+ * The single setValues block is exactly 2 columns wide: Qty(B), Price(C) — NOT Value(D).
+ * Pinned to 2 (asserted in Refresh.test.ts) so the write can never silently widen onto
+ * the =B*C Value formula in col D (T-05-06 / D-02). Exported for that assertion.
+ */
+export const VALUE_COLS = 2;
 
 // Status block (D-04/D-06): per-venue 2 lines, top-right, column-anchored.
 // Static labels are stamped by the layout builder (Plan 02); refreshAll writes
-// only the dynamic LastUpdated (col J) + Stale? (col K) values.
-//   I1:K1  headers | I2:K2 Hyperliquid row | I3:K3 Solana row
-const STATUS_LASTUPDATED_COL = 10; // J
+// only the dynamic LastUpdated (col L) + Stale? (col M) values.
+//
+// CROSS-RUNTIME GEOMETRY (the only integration surface): this MUST match
+// layout-builder/src/dashboardSheet.js STATUS_START_COL (= 11, col K). The status
+// block relocated right of the widened Zone A (now to col I) in Plan 02, so:
+//   STATUS_LASTUPDATED_COL = STATUS_START_COL + 1 = 12 (col L); Stale? = 13 (col M).
+//   K1:M1  headers | K2:M2 Hyperliquid row | K3:M3 Solana row
+// Exported so Refresh.test.ts can assert it equals 12 and cannot drift back onto the
+// new Zone A PnL columns (H/I) or the old col J (T-05-07).
+const STATUS_START_COL = 11; // col K — mirrors layout-builder STATUS_START_COL
+export const STATUS_LASTUPDATED_COL = STATUS_START_COL + 1; // 12 (col L)
 const STATUS_HL_ROW = 2;
 const STATUS_SOL_ROW = 3;
 
@@ -204,7 +222,7 @@ export function refreshAll(): void {
   // Per-venue status (D-04): fresh advances LastUpdated + Stale?=FALSE; failed
   // freezes LastUpdated (last-good time) + Stale?=TRUE; cold-start-failed leaves
   // it blank "—". The two contiguous rows (HL row 2, Solana row 3) are written in
-  // one batched setValues over the LastUpdated(J)+Stale?(K) block.
+  // one batched setValues over the LastUpdated(L)+Stale?(M) block.
   const statusRows = [
     statusPair(hlFresh, blob.hyperliquid?.lastUpdated),
     statusPair(solFresh, blob.solana?.lastUpdated),
@@ -248,7 +266,7 @@ function readCurrentSheet(values: unknown[][]): Record<string, { price: number; 
 }
 
 /**
- * Build one venue's dynamic status pair [LastUpdated, Stale?] (cols J, K).
+ * Build one venue's dynamic status pair [LastUpdated, Stale?] (cols L, M).
  * Fresh: advance LastUpdated, Stale?=FALSE. Failed-with-last-good: keep the
  * cached LastUpdated, Stale?=TRUE. Failed-cold-start: blank "—", Stale?=TRUE.
  */
