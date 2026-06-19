@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Layout Builder** - Service-account layout builder creates and idempotently updates Dashboard + DCA Log tabs; LAYOUT-02 data-region safety fixed (DATA_START_ROW pinned to a fixed literal) — verified, UAT-passed, threat-secure (completed 2026-06-16)
 - [x] **Phase 3: Data Layer** - Apps Script provider modules (Hyperliquid spot, Jupiter prices + Jupiter Ultra balances) with the Jupiter key and wallet config wired via PropertiesService (completed 2026-06-17)
 - [x] **Phase 4: Refresh & Caching** - Time-driven trigger runs batched writes with blob cache and graceful degradation per provider (completed 2026-06-17)
-- [ ] **Phase 5: PnL & Allocation** - DCA log, cost-basis summary block, unrealized P&L display with color coding, and allocation health zone
+- [x] **Phase 5: PnL & Allocation** - DCA log, cost-basis summary block, unrealized P&L display with color coding, and allocation health zone (completed 2026-06-19)
 - [ ] **Phase 6: Realized PnL & Sell Log** - SELL transaction handling in the DCA Log and realized PnL per asset (proceeds vs DCA cost basis), separate from Phase 5's BUY-only unrealized PnL
 
 ## Phase Details
@@ -144,7 +144,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 **Wave 2** *(depends on 05-02 — must match the chosen STATUS_START_COL)*
 
-- [ ] 05-03-PLAN.md — Apps Script Refresh.ts cross-runtime move: STATUS_LASTUPDATED_COL 10→12 (matches status block at col K) + re-confirm Qty/Price-only write (Value col D excluded, now a formula) + Refresh test assertions (PNL-03)
+- [x] 05-03-PLAN.md — Apps Script Refresh.ts cross-runtime move: STATUS_LASTUPDATED_COL 10→12 (matches status block at col K) + re-confirm Qty/Price-only write (Value col D excluded, now a formula) + Refresh test assertions (PNL-03)
 
 ## Progress
 
@@ -157,7 +157,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 2. Layout Builder | 3/3 | Complete    | 2026-06-16 |
 | 3. Data Layer | 3/3 | Complete    | 2026-06-17 |
 | 4. Refresh & Caching | 3/3 | Complete    | 2026-06-17 |
-| 5. PnL & Allocation | 2/3 | In Progress|  |
+| 5. PnL & Allocation | 3/3 | Complete   | 2026-06-19 |
 | 6. Realized PnL & Sell Log | 0/TBD | Not started | - |
 
 ### Phase 6: Realized PnL & Sell Log
@@ -165,7 +165,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 **Goal:** A user can log SELL transactions in the DCA Log and see realized PnL per asset (sale proceeds vs DCA-weighted cost basis) alongside the existing unrealized PnL, without breaking Phase 5's BUY-only average-cost summary block.
 **Requirements**: PNL-05 (promoted from v2)
 **Depends on:** Phase 5
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 > **Scope note:** Phase 5 deliberately scopes cost basis to BUY rows only (Type=BUY filter) — SELL rows are ignored by the avg-cost/unrealized-PnL summary. Phase 6 introduces SELL semantics: realized PnL (proceeds − cost basis of units sold) per asset, and how SELL rows interact with the BUY-only average. Splitting this out keeps Phase 5's irreversible-data-loss-sensitive layout work focused on unrealized PnL.
 
