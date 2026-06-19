@@ -13,7 +13,13 @@
  * (Qty col B, Price col C per D-10).
  */
 import { test, expect } from "bun:test";
-import { assembleRefreshRows, backfillBlobFromSheet } from "./Refresh";
+import {
+  assembleRefreshRows,
+  backfillBlobFromSheet,
+  STATUS_LASTUPDATED_COL,
+  QTY_COL,
+  VALUE_COLS,
+} from "./Refresh";
 import { ASSETS } from "./Config";
 
 type VenueMap = Record<string, { price: number; qty: number }>;
@@ -140,6 +146,43 @@ test("missing current-sheet entry on cold-start does not inject NaN/null — fal
   for (const cell of btc) {
     expect(typeof cell).toBe("number");
     expect(Number.isFinite(cell as number)).toBe(true);
+  }
+});
+
+// --- Cross-runtime Dashboard geometry (Plan 03 / PNL-03) -------------------------
+//
+// The status block relocated to layout-builder STATUS_START_COL=11 (col K, Plan 02),
+// so refreshAll() MUST write LastUpdated at col L (12) and Stale? at col M (13).
+// These assertions are the cross-runtime coupling guard: the only integration surface
+// is the sheet, so if Refresh.ts drifts back onto Zone A's PnL columns (H/I) or onto
+// the old col J, the live view this phase delivers is corrupted (T-05-07). The Zone A
+// Qty/Price write must also stay exactly 2 cols (B:C), never touching the =B*C Value
+// formula in col D (T-05-06 / D-02).
+
+test("status LastUpdated column matches the relocated layout-builder status block (STATUS_START_COL=11 -> col L = 12)", () => {
+  // STATUS_START_COL (layout builder) = 11 (col K); Refresh col = STATUS_START_COL + 1 = 12 (col L).
+  // Stale? lands at col M (13) via the 2-col status setValues width.
+  expect(STATUS_LASTUPDATED_COL).toBe(12);
+});
+
+test("Zone A Qty/Price write is exactly 2 columns wide (Qty B + Price C), never includes Value (col D)", () => {
+  // VALUE_COLS pinned to 2 so the getRange spans only B:C — the =B*C Value formula
+  // in col D is never clobbered (T-05-06 / D-02). QTY_COL anchors at col B (2).
+  expect(QTY_COL).toBe(2);
+  expect(VALUE_COLS).toBe(2);
+});
+
+test("every assembleRefreshRows output row is exactly 2-wide (Qty/Price only, no Value)", () => {
+  // Behavioral proof the write block carries only [qty, price] per asset — adding a
+  // third element would mean Value (D) leaked into the refresh-written block.
+  const rows = assembleRefreshRows(ASSETS, {
+    hyperliquid: { live: HL_LIVE, cache: null },
+    solana: { live: SOL_LIVE, cache: null },
+  }, currentSheet());
+
+  expect(rows.length).toBe(ASSETS.length);
+  for (const row of rows) {
+    expect(row.length).toBe(2);
   }
 });
 
