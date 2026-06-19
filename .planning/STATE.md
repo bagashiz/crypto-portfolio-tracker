@@ -4,12 +4,12 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 5 context gathered
-last_updated: "2026-06-19T14:35:50.496Z"
-last_activity: 2026-06-19 -- Phase 05 planning complete
+last_updated: "2026-06-19T14:39:53.713Z"
+last_activity: 2026-06-19 -- Phase 05 execution started
 progress:
   total_phases: 6
   completed_phases: 4
-  total_plans: 11
+  total_plans: 14
   completed_plans: 11
   percent: 67
 ---
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-13)
 
 **Core value:** See accurate unrealized PnL — live portfolio value measured against DCA-weighted cost basis — for the whole portfolio at a glance, refreshed automatically.
-**Current focus:** Phase 04 — refresh-caching
+**Current focus:** Phase 05 — pnl-allocation
 
 ## Current Position
 
-Phase: 5
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-06-19 -- Phase 05 planning complete
+Phase: 05 (pnl-allocation) — EXECUTING
+Plan: 1 of 3
+Status: Executing Phase 05
+Last activity: 2026-06-19 -- Phase 05 execution started
 
 Progress: [░░░░░░░░░░] 0%
 

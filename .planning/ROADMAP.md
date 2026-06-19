@@ -139,8 +139,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 **Wave 1**
 
-- [ ] 05-01-PLAN.md — DCA Log BUY-only cost-basis summary formulas (SUMIFS/COUNTIFS/MAXIFS, IFERROR em-dash) + inverted skeleton test, data-region-safe (PNL-01, PNL-02)
-- [ ] 05-02-PLAN.md — Dashboard PnL formulas + allocation health (Value=B*C, AvgCost cross-sheet ref, PnL $/%, Actual %/Drift, SUMPRODUCT blended risk) + green/red conditional formatting (idempotent) + status-block relocation to col K + inverted dashboard test (PNL-03, PNL-04, ALLOC-01, ALLOC-02)
+- [x] 05-01-PLAN.md — DCA Log BUY-only cost-basis summary formulas (SUMIFS/COUNTIFS/MAXIFS, IFERROR em-dash) + inverted skeleton test, data-region-safe (PNL-01, PNL-02)
+- [x] 05-02-PLAN.md — Dashboard PnL formulas + allocation health (Value=B*C, AvgCost cross-sheet ref, PnL $/%, Actual %/Drift, SUMPRODUCT blended risk) + green/red conditional formatting (idempotent) + status-block relocation to col K + inverted dashboard test (PNL-03, PNL-04, ALLOC-01, ALLOC-02)
 
 **Wave 2** *(depends on 05-02 — must match the chosen STATUS_START_COL)*
 
@@ -157,7 +157,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 2. Layout Builder | 3/3 | Complete    | 2026-06-16 |
 | 3. Data Layer | 3/3 | Complete    | 2026-06-17 |
 | 4. Refresh & Caching | 3/3 | Complete    | 2026-06-17 |
-| 5. PnL & Allocation | 0/3 | Not started | - |
+| 5. PnL & Allocation | 2/3 | In Progress|  |
 | 6. Realized PnL & Sell Log | 0/TBD | Not started | - |
 
 ### Phase 6: Realized PnL & Sell Log
@@ -165,7 +165,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 **Goal:** A user can log SELL transactions in the DCA Log and see realized PnL per asset (sale proceeds vs DCA-weighted cost basis) alongside the existing unrealized PnL, without breaking Phase 5's BUY-only average-cost summary block.
 **Requirements**: PNL-05 (promoted from v2)
 **Depends on:** Phase 5
-**Plans:** 0 plans
+**Plans:** 2/3 plans executed
 
 > **Scope note:** Phase 5 deliberately scopes cost basis to BUY rows only (Type=BUY filter) — SELL rows are ignored by the avg-cost/unrealized-PnL summary. Phase 6 introduces SELL semantics: realized PnL (proceeds − cost basis of units sold) per asset, and how SELL rows interact with the BUY-only average. Splitting this out keeps Phase 5's irreversible-data-loss-sensitive layout work focused on unrealized PnL.
 
