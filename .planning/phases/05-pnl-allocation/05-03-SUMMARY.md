@@ -73,3 +73,10 @@ None - plan executed exactly as written. The only judgment call (introducing a l
 ## Known Stubs
 
 None. No placeholder values, mock data sources, or unwired components introduced. The status value cells (L/M) are written at runtime by `refreshAll()` as designed (build-time/run-time split, D-05) — not stubs.
+
+## Self-Check: PASSED
+
+- FOUND: apps-script/src/Refresh.ts (modified, committed 43f8145)
+- FOUND: apps-script/src/Refresh.test.ts (modified, committed 25fa32d)
+- FOUND: .planning/phases/05-pnl-allocation/05-03-SUMMARY.md (3e04a8f)
+- FOUND commits: 43f8145, 25fa32d, 3e04a8f
