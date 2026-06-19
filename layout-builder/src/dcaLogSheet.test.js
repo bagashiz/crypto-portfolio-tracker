@@ -135,13 +135,31 @@ test("a full-capacity registry (MAX_SUMMARY_ROWS assets) still respects the fixe
   expect(maxEndRowIndex(reqs)).toBeLessThanOrEqual(DATA_START_ROW_0BASED);
 });
 
-test("both builders are skeleton-only: no formulaValue, no addConditionalFormatRule (D-08)", () => {
+test("summary block now emits formulas; still no conditional formatting on the DCA Log tab (D-04/D-07)", () => {
   const build = JSON.stringify(dcaLogBuildRequests(GRID_ID));
   const update = JSON.stringify(dcaLogUpdateRequests(GRID_ID));
-  expect(build).not.toContain("formulaValue");
+  // Phase 5 INVERSION (D-04): the summary band now carries BUY-only cost-basis formulas.
+  expect(build).toContain("formulaValue");
+  expect(build).toContain("SUMIFS");
+  expect(update).toContain("formulaValue");
+  expect(update).toContain("SUMIFS");
+  // STILL no conditional formatting on the DCA Log tab — only the Dashboard gets it (D-07).
   expect(build).not.toContain("addConditionalFormatRule");
-  expect(update).not.toContain("formulaValue");
   expect(update).not.toContain("addConditionalFormatRule");
+});
+
+test("summary formulas are BUY-only and use the em-dash empty state (D-04/D-06)", () => {
+  const build = JSON.stringify(dcaLogBuildRequests(GRID_ID));
+  // BUY-only filter present in the SUMIFS/COUNTIFS/MAXIFS criteria.
+  expect(build).toContain('SUMIFS');
+  expect(build).toContain('COUNTIFS');
+  expect(build).toContain('MAXIFS');
+  // The BUY-only Type filter. In the JSON-serialized form the inner quotes are escaped,
+  // so the literal substring is `,"BUY"` (with backslash-escaped quotes).
+  expect(build).toContain(',\\"BUY\\"');
+  // Every leaf wrapped in IFERROR(…, "—") so empty assets read "—" not #DIV/0!.
+  expect(build).toContain("IFERROR");
+  expect(build).toContain("—");
 });
 
 test("dcaLogUpdateRequests is deterministic (update twice == once)", () => {
