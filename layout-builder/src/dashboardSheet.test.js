@@ -1,8 +1,11 @@
 // Unit tests for dashboardSheet.js (bun:test, co-located per TESTING.md).
 //
-// These assert the Dashboard request-builders emit a SKELETON-ONLY structural
-// request set (D-08): no formulas, no conditional formatting. Pure functions, no
-// network — runnable under `bun test` with no credentials.
+// Phase 5 (PnL & Allocation) inverts the Phase 2 skeleton-only assertions: the Dashboard
+// builders now emit formula cells (userEnteredValue.formulaValue) and conditional-format
+// rules (addConditionalFormatRule). These tests assert those are PRESENT, that the Zone A
+// last column + status-block anchors moved with the widened geometry, and that the
+// column-non-collision / data-safety invariants still hold. Pure functions, no network —
+// runnable under `bun test` with no credentials.
 //
 // SPREADSHEET_ID must be set for config.js (imported transitively) to load.
 // Imported FIRST so the env var exists before config.js is evaluated (import order).
@@ -16,6 +19,8 @@ import {
   MAX_ZONE_A_ASSET_ROWS,
   STATUS_START_COL,
   STATUS_START_ROW,
+  ZONE_A_HEADERS,
+  ZONE_B_HEADERS,
 } from "./dashboardSheet.js";
 
 const GRID_ID = 0;
@@ -48,16 +53,59 @@ test("build requests reference one holdings row per asset (derived from assets.l
   expect(assetRowCount).toBe(assets.length);
 });
 
-test("build requests are skeleton-only: no formulaValue, no addConditionalFormatRule (D-08)", () => {
+test("build requests now emit formulas + conditional formatting (Phase 5 inverts D-08)", () => {
   const serialized = JSON.stringify(dashboardBuildRequests(GRID_ID));
-  expect(serialized).not.toContain("formulaValue");
-  expect(serialized).not.toContain("addConditionalFormatRule");
+  expect(serialized).toContain("formulaValue");
+  expect(serialized).toContain("addConditionalFormatRule");
 });
 
-test("update requests are skeleton-only: no formulaValue, no addConditionalFormatRule (D-08)", () => {
+test("update requests now emit formulas + conditional formatting (Phase 5 inverts D-08)", () => {
   const serialized = JSON.stringify(dashboardUpdateRequests(GRID_ID));
-  expect(serialized).not.toContain("formulaValue");
-  expect(serialized).not.toContain("addConditionalFormatRule");
+  expect(serialized).toContain("formulaValue");
+  expect(serialized).toContain("addConditionalFormatRule");
+});
+
+test("Zone A/B headers match the widened/reduced D-01/D-05 column maps", () => {
+  expect(ZONE_A_HEADERS).toEqual(["Asset", "Qty", "Price", "Value", "Target %", "Risk", "AvgCost", "PnL $", "PnL %"]);
+  expect(ZONE_B_HEADERS).toEqual(["Asset", "Target %", "Actual %", "Drift", "Risk"]);
+});
+
+test("build output contains the cross-sheet AvgCost reference and SUMPRODUCT blended risk", () => {
+  const serialized = JSON.stringify(dashboardBuildRequests(GRID_ID));
+  expect(serialized).toContain("'DCA Log'!$D"); // single-source-of-truth AvgCost ref (D-03)
+  expect(serialized).toContain("SUMPRODUCT"); // Zone B blended-risk totals (ALLOC-02)
+  expect(serialized).toContain("=B2*C2"); // Value(D) = Qty*Price (D-02)
+});
+
+test("PnL and Drift leaf formulas wrap IFERROR em-dash (D-06)", () => {
+  const serialized = JSON.stringify(dashboardBuildRequests(GRID_ID));
+  expect(serialized).toContain('IFERROR(D2-B2*G2,\\"—\\")'); // PnL $ leaf
+  expect(serialized).toContain("—"); // em-dash empty state present
+});
+
+test("conditional-format rules use green/red background fills with NUMBER comparisons", () => {
+  const serialized = JSON.stringify(dashboardBuildRequests(GRID_ID));
+  expect(serialized).toContain("NUMBER_GREATER");
+  expect(serialized).toContain("NUMBER_LESS");
+  expect(serialized).toContain("backgroundColor");
+});
+
+test("conditional-format rules target Zone A PnL cols H+I and Zone B Drift col D", () => {
+  const reqs = dashboardBuildRequests(GRID_ID);
+  const ranges = reqs.filter((r) => r.addConditionalFormatRule).map((r) => r.addConditionalFormatRule.rule.ranges[0]);
+  // PnL rules span cols H(7)..I(9 exclusive).
+  expect(ranges.some((g) => g.startColumnIndex === 7 && g.endColumnIndex === 9)).toBe(true);
+  // Drift rule targets Zone B col D(3)..(4 exclusive).
+  expect(ranges.some((g) => g.startColumnIndex === 3 && g.endColumnIndex === 4)).toBe(true);
+});
+
+test("--update emits deleteConditionalFormatRule so re-running never stacks rule count (T-05-03)", () => {
+  const reqs = dashboardUpdateRequests(GRID_ID);
+  const adds = reqs.filter((r) => r.addConditionalFormatRule).length;
+  const deletes = reqs.filter((r) => r.deleteConditionalFormatRule).length;
+  expect(adds).toBeGreaterThan(0);
+  // One delete per managed rule (delete-then-add) so the final rule count is stable.
+  expect(deletes).toBe(adds);
 });
 
 // CR-01 guard: a registry larger than MAX_ZONE_A_ASSET_ROWS must fail loudly rather than
@@ -102,9 +150,10 @@ function maxZoneALabelRowIndex(reqs) {
 
 // --- Per-venue refresh status block (REFRESH-04, D-04/D-05/D-06) ---
 
-// 0-based Zone A last column. Zone A uses cols A–G (1-based 1..7 -> 0-based 0..6); the
-// status block must start at or beyond 0-based 7 (col H) to sit strictly right of Zone A.
-const ZONE_A_LAST_COL_0BASED = 6; // col G
+// 0-based Zone A last column. Phase 5 widens Zone A to cols A–I (1-based 1..9 -> 0-based
+// 0..8); the status block (relocated to col K, STATUS_START_COL=11) must start strictly
+// right of this with a gap, so the column-anchoring tests use the bumped anchor.
+const ZONE_A_LAST_COL_0BASED = 8; // col I
 
 // Collect every status-block label request: those whose start.columnIndex is in the
 // status columns (>= STATUS_START_COL-1) — i.e. right of Zone A's label/format ranges.
@@ -124,7 +173,7 @@ test("build requests include the static status-block labels (LastUpdated, Stale?
   expect(serialized).toContain("Solana"); // matches "Solana/Jupiter"
 });
 
-test("status block is column-anchored right of Zone A (0-based columnIndex >= 7)", () => {
+test("status block is column-anchored right of widened Zone A (0-based columnIndex > 8)", () => {
   const reqs = dashboardBuildRequests(GRID_ID);
   const statusReqs = statusBlockRequests(reqs);
   expect(statusReqs.length).toBeGreaterThan(0);
