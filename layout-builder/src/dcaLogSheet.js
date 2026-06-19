@@ -20,9 +20,18 @@
 // to assets.length; the reserved rows below stay blank; and assets.length > MAX_SUMMARY_ROWS
 // fails loudly (below) rather than silently shifting the boundary into the data region.
 //
-// SKELETON ONLY (D-08): labels + number formats + frozen rows. NO SUMIF/PnL formulas
-// (Phase 5 will SUMIF over open-ended A{DATA_START_ROW}:A ranges, D-07) and NO
-// conditional formatting. NO data-validation dropdowns (PNL-06 v2-deferred).
+// SUMMARY FORMULAS (Phase 5, D-04/D-06): the per-asset summary band (rows 2..1+N)
+// now carries BUY-only cost-basis formulas — Total Invested, Total Qty, DCA-weighted
+// Avg Cost, Buy Count, Last Buy, Total Fees — computed via SUMIFS/COUNTIFS/MAXIFS over
+// open-ended A{DATA_START_ROW}:A ranges that READ the data region but never WRITE it.
+// Every leaf is wrapped in IFERROR(…, "—") so an asset with no BUY rows reads "—" not
+// #DIV/0!. This is the single source of truth for avg cost (the Dashboard AvgCost cell
+// references it, D-03). SELL rows are ignored — realized PnL is Phase 6 (D-04).
+//
+// STILL NO conditional formatting on this tab (only the Dashboard, D-07) and NO
+// data-validation dropdowns (PNL-06 v2-deferred). The open-ended ranges appear ONLY
+// inside formula STRINGS; every emitted request range stays strictly above DATA_START_ROW
+// (the irreversible-data-loss guard, LAYOUT-02 / D-06).
 
 import { assets, DCA_LOG, DATA_START_ROW, MAX_SUMMARY_ROWS } from "./config.js";
 
@@ -49,10 +58,15 @@ const TX_HEADERS = ["Date", "Asset", "Type", "Price", "Qty", "Total", "Fee", "Ne
 const CURRENCY_FORMAT = { type: "CURRENCY", pattern: "$#,##0.00" };
 const DATE_FORMAT = { type: "DATE", pattern: "yyyy-mm-dd" };
 
-// --- Request helpers (no formulas ever emitted) ---
+// --- Request helpers ---
 
 function stringCell(value) {
   return { userEnteredValue: { stringValue: value } };
+}
+
+// Mirror of stringCell, emitting a formula payload. The formula string begins with "=".
+function formulaCell(formula) {
+  return { userEnteredValue: { formulaValue: formula } };
 }
 
 function labelRowRequest(sheetId, row, startCol, labels) {
@@ -61,6 +75,20 @@ function labelRowRequest(sheetId, row, startCol, labels) {
       fields: "userEnteredValue",
       start: { sheetId, rowIndex: row - 1, columnIndex: startCol - 1 },
       rows: [{ values: labels.map(stringCell) }],
+    },
+  };
+}
+
+// Mirror of labelRowRequest, mapping each entry through formulaCell. `row`/`startCol`
+// are 1-based and converted to 0-based. The request range spans exactly one row at
+// `row` — the open-ended A{DATA_START_ROW}:A ranges live ONLY inside the formula
+// strings, so this request never addresses the data region (LAYOUT-02 / D-06).
+function formulaRowRequest(sheetId, row, startCol, formulas) {
+  return {
+    updateCells: {
+      fields: "userEnteredValue",
+      start: { sheetId, rowIndex: row - 1, columnIndex: startCol - 1 },
+      rows: [{ values: formulas.map(formulaCell) }],
     },
   };
 }
@@ -127,6 +155,43 @@ function bandRequests(sheetId, assetList = assets) {
     requests.push(labelRowRequest(sheetId, row, 1, [asset.id]));
   });
 
+  // BUY-only cost-basis summary formulas, one row per asset (rows 2..1+N), starting at
+  // column B (col 2). Each cell references the open-ended transaction data region via
+  // A{dataAnchor}:A ranges INSIDE the formula string only — the request range itself is a
+  // single summary row, never the data region (D-04/D-06). The summary row's own asset id
+  // sits in column A (already emitted above) and is the SUMIFS criterion ($A{row}).
+  //
+  // TX column map (per PATTERNS.md / D-04): Date=A, Asset=B, Type=C, Price=D, Qty=E,
+  // Total=F, Fee=G, Net Cost=H. Summary metric columns: Total Invested=B, Total Qty=C,
+  // Avg Cost=D, Buy Count=E, Last Buy=F, Total Fees=G.
+  //
+  // `dataAnchor` is derived from the imported DATA_START_ROW constant so the formula
+  // strings track the fixed boundary (currently 23) — never a hard-coded literal here.
+  const dataAnchor = DATA_START_ROW;
+  assetList.forEach((asset, i) => {
+    const row = FIRST_SUMMARY_ROW + i;
+    const a = `$A${row}`; // this summary row's asset id (SUMIFS criterion)
+    const buyFilter = `$C$${dataAnchor}:$C,"BUY"`;
+    const assetFilter = `$B$${dataAnchor}:$B,${a}`;
+    const totalInvested = `SUMIFS($H$${dataAnchor}:$H,${assetFilter},${buyFilter})`;
+    const totalQty = `SUMIFS($E$${dataAnchor}:$E,${assetFilter},${buyFilter})`;
+    const formulas = [
+      // Total Invested (B)
+      `=IFERROR(${totalInvested},"—")`,
+      // Total Qty (C)
+      `=IFERROR(${totalQty},"—")`,
+      // Avg Cost (D) — DCA-weighted: Invested / Qty (single source of truth)
+      `=IFERROR(${totalInvested}/${totalQty},"—")`,
+      // Buy Count (E)
+      `=IFERROR(COUNTIFS(${assetFilter},${buyFilter}),"—")`,
+      // Last Buy (F)
+      `=IFERROR(MAXIFS($A$${dataAnchor}:$A,${assetFilter},${buyFilter}),"—")`,
+      // Total Fees (G)
+      `=IFERROR(SUMIFS($G$${dataAnchor}:$G,${assetFilter},${buyFilter}),"—")`,
+    ];
+    requests.push(formulaRowRequest(sheetId, row, 2, formulas));
+  });
+
   // Summary number formats span the FULL reserved block (rows 2..1+MAX_SUMMARY_ROWS = 2-21),
   // not just the used rows — the reserved rows are still strictly above the data region
   // (endRowIndex = MAX_SUMMARY_ROWS + 1 = 21, exclusive 21 < boundary 22). Formats are
@@ -135,6 +200,9 @@ function bandRequests(sheetId, assetList = assets) {
   requests.push(numberFormatRequest(sheetId, FIRST_SUMMARY_ROW, reservedEnd, 2, 2, CURRENCY_FORMAT));
   requests.push(numberFormatRequest(sheetId, FIRST_SUMMARY_ROW, reservedEnd, 4, 4, CURRENCY_FORMAT));
   requests.push(numberFormatRequest(sheetId, FIRST_SUMMARY_ROW, reservedEnd, 7, 7, CURRENCY_FORMAT));
+  // Last Buy (col F = 6) is a date (MAXIFS over the Date column) — format it as a date
+  // over the same reserved block. Still strictly above the data region (endRowIndex 21 < 22).
+  requests.push(numberFormatRequest(sheetId, FIRST_SUMMARY_ROW, reservedEnd, 6, 6, DATE_FORMAT));
 
   // Transaction header row (cols A-I), immediately above the data region.
   requests.push(labelRowRequest(sheetId, TX_HEADER_ROW, 1, TX_HEADERS));
