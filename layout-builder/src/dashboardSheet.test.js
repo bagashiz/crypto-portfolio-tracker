@@ -73,7 +73,7 @@ test("Zone A/B headers match the widened/reduced D-01/D-05 column maps", () => {
 
 test("build output contains the cross-sheet AvgCost reference and SUMPRODUCT blended risk", () => {
   const serialized = JSON.stringify(dashboardBuildRequests(GRID_ID));
-  expect(serialized).toContain("'DCA Log'!$D"); // single-source-of-truth AvgCost ref (D-03)
+  expect(serialized).toContain("'Transaction Log'!$D"); // single-source-of-truth AvgCost ref (D-03); tab renamed in Phase 6 (D-07)
   expect(serialized).toContain("SUMPRODUCT"); // Zone B blended-risk totals (ALLOC-02)
   expect(serialized).toContain("=B2*C2"); // Value(D) = Qty*Price (D-02)
 });

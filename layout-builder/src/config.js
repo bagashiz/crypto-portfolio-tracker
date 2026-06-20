@@ -38,7 +38,14 @@ export function getSpreadsheetId() {
 
 // Sheet (tab) name constants — UPPER_SNAKE_CASE per CONVENTIONS.md.
 export const DASHBOARD = "Dashboard";
-export const DCA_LOG = "DCA Log";
+// Phase 6 / D-07: the DCA Log tab is renamed to the user-visible "Transaction Log"
+// (it now carries SELL rows + realized PnL, not just DCA buys). The symbol name stays
+// DCA_LOG so existing imports are unchanged.
+export const DCA_LOG = "Transaction Log";
+// OLD title, kept ONLY so index.js --update can discover a previously-built tab still
+// named "DCA Log" and rename it in place (RESEARCH Pitfall 2 / D-07). Never used as a
+// write target — purely for the one-time rename-discovery transition.
+export const DCA_LOG_LEGACY = "DCA Log";
 
 // DCA Log transaction data-region boundary (1-based row index) — FIXED at build time.
 //
