@@ -157,7 +157,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 2. Layout Builder | 3/3 | Complete    | 2026-06-16 |
 | 3. Data Layer | 3/3 | Complete    | 2026-06-17 |
 | 4. Refresh & Caching | 3/3 | Complete    | 2026-06-17 |
-| 5. PnL & Allocation | 3/3 | Complete   | 2026-06-19 |
+| 5. PnL & Allocation | 3/3 | Complete    | 2026-06-20 |
 | 6. Realized PnL & Sell Log | 0/TBD | Not started | - |
 
 ### Phase 6: Realized PnL & Sell Log

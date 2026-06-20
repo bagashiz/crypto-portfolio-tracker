@@ -37,10 +37,10 @@ Requirements for the initial release. Each maps to a roadmap phase.
 
 ### Cost Basis & PnL
 
-- [ ] **PNL-01**: User can record DCA transactions in the DCA Log tab (date, asset, type, price, qty, total, fee, net cost, notes)
-- [ ] **PNL-02**: A per-asset summary block computes total invested, total qty, DCA-weighted average cost, buy count, last buy, and total fees as the single source of truth for cost basis
-- [ ] **PNL-03**: The Dashboard shows unrealized P&L in USD (`Value − Qty × AvgCost`) and P&L %
-- [ ] **PNL-04**: P&L cells are color-coded via conditional formatting (green for gains, red for losses)
+- [x] **PNL-01**: User can record DCA transactions in the DCA Log tab (date, asset, type, price, qty, total, fee, net cost, notes)
+- [x] **PNL-02**: A per-asset summary block computes total invested, total qty, DCA-weighted average cost, buy count, last buy, and total fees as the single source of truth for cost basis
+- [x] **PNL-03**: The Dashboard shows unrealized P&L in USD (`Value − Qty × AvgCost`) and P&L %
+- [x] **PNL-04**: P&L cells are color-coded via conditional formatting (green for gains, red for losses)
 
 ### Realized PnL
 
@@ -48,8 +48,8 @@ Requirements for the initial release. Each maps to a roadmap phase.
 
 ### Allocation Health
 
-- [ ] **ALLOC-01**: The allocation zone shows target %, actual %, and drift per asset
-- [ ] **ALLOC-02**: The allocation zone shows risk score per asset, with a totals row (target sum, blended risk via `SUMPRODUCT`) _(APY and monthly yield scratched in Phase 5 discussion 2026-06-19 — see Phase 5 CONTEXT)_
+- [x] **ALLOC-01**: The allocation zone shows target %, actual %, and drift per asset
+- [x] **ALLOC-02**: The allocation zone shows risk score per asset, with a totals row (target sum, blended risk via `SUMPRODUCT`) _(APY and monthly yield scratched in Phase 5 discussion 2026-06-19 — see Phase 5 CONTEXT)_
 
 ### Security & Secrets
 
@@ -101,12 +101,12 @@ Which phases cover which requirements. Populated during roadmap creation.
 | REFRESH-02 | Phase 4 | Complete |
 | REFRESH-03 | Phase 4 | Complete |
 | REFRESH-04 | Phase 4 | Complete |
-| PNL-01 | Phase 5 | Pending |
-| PNL-02 | Phase 5 | Pending |
-| PNL-03 | Phase 5 | Pending |
-| PNL-04 | Phase 5 | Pending |
-| ALLOC-01 | Phase 5 | Pending |
-| ALLOC-02 | Phase 5 | Pending |
+| PNL-01 | Phase 5 | Complete |
+| PNL-02 | Phase 5 | Complete |
+| PNL-03 | Phase 5 | Complete |
+| PNL-04 | Phase 5 | Complete |
+| ALLOC-01 | Phase 5 | Complete |
+| ALLOC-02 | Phase 5 | Complete |
 | PNL-05 | Phase 6 | Pending |
 
 **Coverage:**
