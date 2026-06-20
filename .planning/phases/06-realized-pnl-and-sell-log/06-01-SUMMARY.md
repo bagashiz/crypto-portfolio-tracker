@@ -121,6 +121,13 @@ None - no external service configuration required. (The tab rename is applied pr
 - The never-write-the-data-region guard and the BUY-only summary are provably intact (critical data-region test green; BUY-only filter test green).
 - No blockers.
 
+## Self-Check: PASSED
+
+All claimed files exist and all task/summary commits are present in git history:
+- Files: config.js, dcaLogSheet.js, dcaLogSheet.test.js, dashboardSheet.test.js, 06-01-SUMMARY.md — FOUND
+- Commits: f336924 (Task 1), 62f59e8 (Task 2), a73d095 (SUMMARY) — FOUND
+- Verification: full `bun test` exits 0 (44 pass, 0 fail).
+
 ---
 *Phase: 06-realized-pnl-and-sell-log*
 *Completed: 2026-06-20*
