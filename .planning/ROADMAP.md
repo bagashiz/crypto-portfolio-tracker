@@ -158,14 +158,14 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 3. Data Layer | 3/3 | Complete    | 2026-06-17 |
 | 4. Refresh & Caching | 3/3 | Complete    | 2026-06-17 |
 | 5. PnL & Allocation | 3/3 | Complete    | 2026-06-20 |
-| 6. Realized PnL & Sell Log | 0/TBD | Not started | - |
+| 6. Realized PnL & Sell Log | 1/2 | In Progress|  |
 
 ### Phase 6: Realized PnL & Sell Log
 
 **Goal:** A user can log SELL transactions in the DCA Log and see realized PnL per asset (sale proceeds vs DCA-weighted cost basis) alongside the existing unrealized PnL, without breaking Phase 5's BUY-only average-cost summary block.
 **Requirements**: PNL-05 (promoted from v2)
 **Depends on:** Phase 5
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 > **Scope note:** Phase 5 deliberately scopes cost basis to BUY rows only (Type=BUY filter) — SELL rows are ignored by the avg-cost/unrealized-PnL summary. Phase 6 introduces SELL semantics: realized PnL (proceeds − cost basis of units sold) per asset, and how SELL rows interact with the BUY-only average. Splitting this out keeps Phase 5's irreversible-data-loss-sensitive layout work focused on unrealized PnL.
 
@@ -173,7 +173,7 @@ Plans:
 
 **Wave 1**
 
-- [ ] 06-01-PLAN.md — Realized PnL builder: rename DCA_LOG → "Transaction Log", BYROW spill helper column, per-asset realized summary metrics (Sold Qty / Net Proceeds / Realized $ / Realized %), portfolio Total Realized, conditional formatting; updated offline tests
+- [x] 06-01-PLAN.md — Realized PnL builder: rename DCA_LOG → "Transaction Log", BYROW spill helper column, per-asset realized summary metrics (Sold Qty / Net Proceeds / Realized $ / Realized %), portfolio Total Realized, conditional formatting; updated offline tests
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
