@@ -433,10 +433,31 @@ export function dashboardBuildRequests(sheetId, assetList = assets) {
 
 // Re-apply the Dashboard structure idempotently (--update). No protected data region
 // on the Dashboard, so this mirrors the build structural ranges (labels/formats/frozen).
+//
+// WR-01: the conditional-rule pre-clear deletes are NO LONGER emitted inline here. They
+// are split into dashboardConditionalPreClearRequests so index.js can send them in their
+// OWN batchUpdate, wrapped in a try/catch that swallows only the "no rule at index" 400.
+// Embedding the positional deletes ([2,1,0]) in this structural batch meant that if the
+// live rule count had drifted below MANAGED_RULE_COUNT (a rule deleted via the Sheets UI,
+// or a prior partial run), a delete at a nonexistent index returned 400 and rolled back
+// the ENTIRE atomic --update — silently leaving Dashboard + DCA Log structure unrefreshed.
+// Update now passes false (no inline pre-clear); the structural re-apply always lands.
 export function dashboardUpdateRequests(sheetId, assetList = assets) {
-  // Update path: tab already has exactly MANAGED_RULE_COUNT (3) managed rules → pre-clear
-  // them in descending order so the re-add converges to 3 (never stacks duplicates).
-  return structuralRequests(sheetId, assetList, true);
+  return structuralRequests(sheetId, assetList, false);
+}
+
+// WR-01: the descending-index conditional-format pre-clear deletes for --update, isolated
+// so index.js can send them in a SEPARATE, error-tolerant batchUpdate (the structural batch
+// must never be rolled back by an out-of-range delete on rule-count drift). Emits
+// [MANAGED_RULE_COUNT-1 .. 0]; index.js swallows the "no rule at index" 400 these can raise
+// when the live count is below MANAGED_RULE_COUNT, then re-applies the add rules (which
+// converge to exactly MANAGED_RULE_COUNT) via the structural batch regardless.
+export function dashboardConditionalPreClearRequests(sheetId) {
+  const requests = [];
+  for (let i = MANAGED_RULE_COUNT - 1; i >= 0; i--) {
+    requests.push(deleteConditionalFormatRuleRequest(sheetId, i));
+  }
+  return requests;
 }
 
 // Re-export the Zone B header row and Zone A cap so tests can assert the no-collision

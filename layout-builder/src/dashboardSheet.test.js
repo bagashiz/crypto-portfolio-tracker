@@ -15,6 +15,7 @@ import assets from "../../assets.json" with { type: "json" };
 import {
   dashboardBuildRequests,
   dashboardUpdateRequests,
+  dashboardConditionalPreClearRequests,
   ZONE_B_HEADER_ROW,
   MAX_ZONE_A_ASSET_ROWS,
   STATUS_START_COL,
@@ -99,16 +100,30 @@ test("conditional-format rules target Zone A PnL cols H+I and Zone B Drift col D
   expect(ranges.some((g) => g.startColumnIndex === 3 && g.endColumnIndex === 4)).toBe(true);
 });
 
-test("--update emits deleteConditionalFormatRule so re-running never stacks rule count (T-05-03)", () => {
+// WR-01: the conditional-format pre-clear DELETES were split out of dashboardUpdateRequests
+// into dashboardConditionalPreClearRequests so index.js can send them in a SEPARATE,
+// error-tolerant batchUpdate. The structural --update batch must therefore emit ZERO
+// deletes (so an out-of-range delete on rule-count drift can never roll it back), while
+// still emitting the add rules that converge the count back to 3.
+test("--update structural batch emits ZERO deleteConditionalFormatRule but still adds rules (WR-01)", () => {
   const reqs = dashboardUpdateRequests(GRID_ID);
   const adds = reqs.filter((r) => r.addConditionalFormatRule).length;
   const deletes = reqs.filter((r) => r.deleteConditionalFormatRule);
   expect(adds).toBeGreaterThan(0);
-  // One delete per managed rule (delete-then-add) so the final rule count is stable.
-  expect(deletes.length).toBe(adds);
-  // Exactly 3 managed rules, pre-cleared in DESCENDING index order ([2, 1, 0]) so each
-  // delete at the current top index removes one rule while keeping remaining indices stable.
-  expect(deletes.map((r) => r.deleteConditionalFormatRule.index)).toEqual([2, 1, 0]);
+  // No positional deletes in the structural batch — they live in the separate pre-clear now.
+  expect(deletes.length).toBe(0);
+});
+
+// WR-01: the isolated pre-clear request set deletes exactly the MANAGED_RULE_COUNT (3)
+// managed rules in DESCENDING index order ([2, 1, 0]) so each delete at the current top
+// index removes one rule while keeping remaining indices stable. index.js sends these in
+// their own batchUpdate and swallows only the "no rule at index" 400 on rule-count drift.
+test("dashboardConditionalPreClearRequests deletes the 3 managed rules in descending order [2,1,0] (WR-01)", () => {
+  const reqs = dashboardConditionalPreClearRequests(GRID_ID);
+  expect(reqs.every((r) => r.deleteConditionalFormatRule)).toBe(true);
+  expect(reqs.map((r) => r.deleteConditionalFormatRule.index)).toEqual([2, 1, 0]);
+  // Each delete targets the dashboard sheetId, never another tab.
+  expect(reqs.every((r) => r.deleteConditionalFormatRule.sheetId === GRID_ID)).toBe(true);
 });
 
 // CR-01: --build creates the Dashboard tab in the SAME atomic batchUpdate, so the tab has

@@ -22,7 +22,11 @@
 
 import { getSheetsClient } from "./auth.js";
 import { getSpreadsheetId, DASHBOARD, DCA_LOG } from "./config.js";
-import { dashboardBuildRequests, dashboardUpdateRequests } from "./dashboardSheet.js";
+import {
+  dashboardBuildRequests,
+  dashboardUpdateRequests,
+  dashboardConditionalPreClearRequests,
+} from "./dashboardSheet.js";
 import { dcaLogBuildRequests, dcaLogUpdateRequests } from "./dcaLogSheet.js";
 
 const USAGE =
@@ -120,6 +124,16 @@ async function runBuild(sheets, spreadsheetId) {
 
 // --- --update (LAYOUT-02 + D-06: structural-only, never the data region) --------
 
+// WR-01: true only for the Sheets API's out-of-range conditional-format-delete error
+// ("No conditional format rule found at index N"). This is the EXPECTED outcome when the
+// live managed-rule count has drifted below MANAGED_RULE_COUNT (a rule deleted via the UI
+// or a prior partial run). Only this specific 400 is tolerated during the pre-clear; any
+// other error (auth, missing sheet, malformed request) must still surface loudly.
+function isNoConditionalRuleAtIndexError(err) {
+  const message = err && err.message ? err.message : String(err);
+  return /No conditional format rule found at index/i.test(message);
+}
+
 async function runUpdate(sheets, spreadsheetId) {
   const tabs = await getExistingTabs(sheets, spreadsheetId);
 
@@ -135,9 +149,27 @@ async function runUpdate(sheets, spreadsheetId) {
     );
   }
 
+  // WR-01: pre-clear the managed conditional-format rules in their OWN batchUpdate,
+  // BEFORE the structural re-apply, so an out-of-range delete (live rule count drifted
+  // below MANAGED_RULE_COUNT) can NEVER roll back the structural batch. We swallow ONLY
+  // the "no rule at index" 400 — the deletes are best-effort idempotency hygiene, and the
+  // structural batch below re-adds exactly MANAGED_RULE_COUNT rules regardless, so a
+  // partial/empty rule set still converges. Any other error surfaces loudly.
+  try {
+    await batchUpdate(sheets, spreadsheetId, dashboardConditionalPreClearRequests(dashboardId));
+  } catch (err) {
+    if (!isNoConditionalRuleAtIndexError(err)) throw err;
+    console.warn(
+      "Conditional-format pre-clear hit fewer than the expected managed rules " +
+        "(live count drifted below 3); continuing — the structural re-apply re-adds them."
+    );
+  }
+
   // D-06: append ONLY the Plan 01 update builders (provably bounded above
   // DATA_START_ROW). No ad-hoc clear/write request is added here, so the DCA Log
-  // transaction data region is never addressed. Single batched call.
+  // transaction data region is never addressed. Single batched call. The
+  // conditional-format ADD rules are still emitted here (dashboardUpdateRequests);
+  // only the positional DELETES were split out above (WR-01).
   const requests = [
     ...dashboardUpdateRequests(dashboardId),
     ...dcaLogUpdateRequests(dcaLogId),
