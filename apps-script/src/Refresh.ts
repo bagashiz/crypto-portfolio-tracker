@@ -161,8 +161,7 @@ export const VALUE_COLS = 2;
 // new Zone A PnL columns (H/I) or the old col J (T-05-07).
 const STATUS_START_COL = 11; // col K — mirrors layout-builder STATUS_START_COL
 export const STATUS_LASTUPDATED_COL = STATUS_START_COL + 1; // 12 (col L)
-const STATUS_HL_ROW = 2;
-const STATUS_SOL_ROW = 3;
+const STATUS_HL_ROW = 2; // Solana row (3) is implied by the 2-row status range height.
 
 // --- Orchestrator --------------------------------------------------------------
 
@@ -204,7 +203,6 @@ export function refreshAll(): void {
   if (!sheet) {
     throw new Error("Dashboard sheet not found: " + DASHBOARD_SHEET);
   }
-  const lastAssetRow = ZONE_A_FIRST_ASSET_ROW + ASSETS.length - 1;
   const valueRange = sheet.getRange(ZONE_A_FIRST_ASSET_ROW, QTY_COL, ASSETS.length, VALUE_COLS);
   const currentSheet = readCurrentSheet(valueRange.getValues());
 
@@ -219,10 +217,24 @@ export function refreshAll(): void {
   );
   valueRange.setValues(rows); // SINGLE batched Qty/Price write (REFRESH-02)
 
+  // CR-01: backfill any venue slice missing from the blob (failed this run AND
+  // evicted from cache) using the values just written, so the cache never diverges
+  // from the sheet and the last-good buffer survives an outage that coincides with
+  // TTL eviction.
+  //
+  // WR-02: this MUST run BEFORE the status block is written so a single finalized
+  // blob drives BOTH the Zone A values and the status cells. Deriving the status
+  // pair from the post-backfill blob makes the displayed LastUpdated/Stale? provably
+  // consistent with the persisted slice, rather than coincidentally equal (a future
+  // change that backfills a real recovered timestamp would otherwise silently desync
+  // the display from the cache).
+  backfillBlobFromSheet(blob, ASSETS, rows);
+
   // Per-venue status (D-04): fresh advances LastUpdated + Stale?=FALSE; failed
   // freezes LastUpdated (last-good time) + Stale?=TRUE; cold-start-failed leaves
   // it blank "—". The two contiguous rows (HL row 2, Solana row 3) are written in
-  // one batched setValues over the LastUpdated(L)+Stale?(M) block.
+  // one batched setValues over the LastUpdated(L)+Stale?(M) block. Derived from the
+  // post-backfill blob (WR-02) so the displayed status mirrors the persisted slice.
   const statusRows = [
     statusPair(hlFresh, blob.hyperliquid?.lastUpdated),
     statusPair(solFresh, blob.solana?.lastUpdated),
@@ -231,17 +243,8 @@ export function refreshAll(): void {
     .getRange(STATUS_HL_ROW, STATUS_LASTUPDATED_COL, statusRows.length, 2)
     .setValues(statusRows);
 
-  // CR-01: before persisting, backfill any venue slice missing from the blob
-  // (failed this run AND evicted from cache) using the values just written, so
-  // the cache never diverges from the sheet and the last-good buffer survives an
-  // outage that coincides with TTL eviction.
-  backfillBlobFromSheet(blob, ASSETS, rows);
-
   // Persist the updated last-good blob (TTL only bounds retention, D-02).
   cache.put(PRICES_ALL, JSON.stringify(blob), CACHE_TTL_SECONDS);
-
-  void lastAssetRow; // geometry sanity reference; range already spans the rows.
-  void STATUS_SOL_ROW; // row 3 is implied by the 2-row status range start at row 2.
 }
 
 /** Read the PRICES_ALL blob; a miss is a normal cold-start (D-07), not an error. */
