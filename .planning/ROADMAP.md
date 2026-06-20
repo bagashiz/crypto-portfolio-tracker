@@ -18,7 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Data Layer** - Apps Script provider modules (Hyperliquid spot, Jupiter prices + Jupiter Ultra balances) with the Jupiter key and wallet config wired via PropertiesService (completed 2026-06-17)
 - [x] **Phase 4: Refresh & Caching** - Time-driven trigger runs batched writes with blob cache and graceful degradation per provider (completed 2026-06-17)
 - [x] **Phase 5: PnL & Allocation** - DCA log, cost-basis summary block, unrealized P&L display with color coding, and allocation health zone (completed 2026-06-19)
-- [ ] **Phase 6: Realized PnL & Sell Log** - SELL transaction handling in the DCA Log and realized PnL per asset (proceeds vs DCA cost basis), separate from Phase 5's BUY-only unrealized PnL
+- [x] **Phase 6: Realized PnL & Sell Log** - SELL transaction handling in the DCA Log and realized PnL per asset (proceeds vs DCA cost basis), separate from Phase 5's BUY-only unrealized PnL (completed 2026-06-20)
 
 ## Phase Details
 
@@ -158,14 +158,14 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 3. Data Layer | 3/3 | Complete    | 2026-06-17 |
 | 4. Refresh & Caching | 3/3 | Complete    | 2026-06-17 |
 | 5. PnL & Allocation | 3/3 | Complete    | 2026-06-20 |
-| 6. Realized PnL & Sell Log | 1/2 | In Progress|  |
+| 6. Realized PnL & Sell Log | 2/2 | Complete   | 2026-06-20 |
 
 ### Phase 6: Realized PnL & Sell Log
 
 **Goal:** A user can log SELL transactions in the DCA Log and see realized PnL per asset (sale proceeds vs DCA-weighted cost basis) alongside the existing unrealized PnL, without breaking Phase 5's BUY-only average-cost summary block.
 **Requirements**: PNL-05 (promoted from v2)
 **Depends on:** Phase 5
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 > **Scope note:** Phase 5 deliberately scopes cost basis to BUY rows only (Type=BUY filter) — SELL rows are ignored by the avg-cost/unrealized-PnL summary. Phase 6 introduces SELL semantics: realized PnL (proceeds − cost basis of units sold) per asset, and how SELL rows interact with the BUY-only average. Splitting this out keeps Phase 5's irreversible-data-loss-sensitive layout work focused on unrealized PnL.
 
@@ -177,4 +177,4 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 06-02-PLAN.md — Rename orchestration: old-title-aware in-place tab rename (updateSheetProperties field-mask, never delete+recreate), log-tab conditional pre-clear batch, Apps Script no-op verification; offline rename tests
+- [x] 06-02-PLAN.md — Rename orchestration: old-title-aware in-place tab rename (updateSheetProperties field-mask, never delete+recreate), log-tab conditional pre-clear batch, Apps Script no-op verification; offline rename tests
