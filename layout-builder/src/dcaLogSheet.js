@@ -35,6 +35,13 @@
 
 import { assets, DCA_LOG, DATA_START_ROW, MAX_SUMMARY_ROWS } from "./config.js";
 
+// Phase 6 (D-04/D-07): SELL semantics + realized PnL. The Transaction Log now books a
+// per-row realized-PnL helper (col J, a single row-22 BYROW spill), per-asset realized
+// summary metrics (Sold Qty / Net Proceeds / Realized $ / Realized %), a portfolio Total
+// Realized cell, and green/red conditional formatting on the Realized summary cells. ALL
+// of this stays strictly above DATA_START_ROW (23): the only thing that "touches" the data
+// region is a formula STRING inside the row-22 spill cell — never a request range (D-06).
+
 // --- Layout constants (positioned from the FIXED boundary, never from assets.length) ---
 
 const SUMMARY_HEADER_ROW = 1; // 1-based
@@ -42,21 +49,33 @@ const FIRST_SUMMARY_ROW = 2; // first per-asset summary row
 // Last row of the reserved summary block (1-based): row (1 + MAX_SUMMARY_ROWS) = 21.
 const LAST_RESERVED_SUMMARY_ROW = 1 + MAX_SUMMARY_ROWS;
 const SUMMARY_HEADERS = [
-  "Summary",
-  "Total Invested",
-  "Total Qty",
-  "Avg Cost (DCA)",
-  "Buy Count",
-  "Last Buy",
-  "Total Fees",
+  "Summary", // col A
+  "Total Invested", // col B  (Phase 5 BUY-only)
+  "Total Qty", // col C
+  "Avg Cost (DCA)", // col D
+  "Buy Count", // col E
+  "Last Buy", // col F
+  "Total Fees", // col G
+  // Phase 6 realized block (cols H-K), emitted by the SELL-only summary loop:
+  "Sold Qty", // col H
+  "Net Proceeds", // col I
+  "Realized $", // col J
+  "Realized %", // col K
+  "Total Realized", // col L — portfolio-wide SUM of per-asset Realized $
 ];
 
 // Transaction header row sits immediately above the data region.
 const TX_HEADER_ROW = DATA_START_ROW - 1; // 1-based
-const TX_HEADERS = ["Date", "Asset", "Type", "Price", "Qty", "Total", "Fee", "Net Cost", "Notes"];
+// Phase 6 (D-02): the transaction header gains a 10th column, "Realized" (col J). This is
+// the per-row realized-PnL helper whose row-22 header cell carries the BYROW spill formula;
+// the spill fills col J for every SELL data row below (BUY/blank rows spill empty).
+const TX_HEADERS = ["Date", "Asset", "Type", "Price", "Qty", "Total", "Fee", "Net Cost", "Notes", "Realized"];
 
 const CURRENCY_FORMAT = { type: "CURRENCY", pattern: "$#,##0.00" };
 const DATE_FORMAT = { type: "DATE", pattern: "yyyy-mm-dd" };
+// Phase 6 (D-06): percent format for the Realized % summary column (copied from
+// dashboardSheet.js — same shape so both tabs render percentages identically).
+const PERCENT_FORMAT = { type: "PERCENT", pattern: "0.00%" };
 
 // --- Request helpers ---
 
@@ -192,6 +211,55 @@ function bandRequests(sheetId, assetList = assets) {
     requests.push(formulaRowRequest(sheetId, row, 2, formulas));
   });
 
+  // --- Phase 6: per-asset REALIZED summary loop (SELL-only), separate from the BUY loop ---
+  //
+  // A strictly separate Type="SELL" filter and a new startCol (col H = 8) so the Phase 5
+  // BUY-only loop above is left byte-for-byte unchanged (D-04 / threat T-06-03). Columns:
+  //   Sold Qty=H, Net Proceeds=I, Realized $=J, Realized %=K.
+  // Realized $ sums the col-J "Realized" data-region helper (filled by the BYROW spill).
+  // Realized % uses the Pitfall-4 denominator: costBasisSold = NetProceeds − Realized$,
+  // so % = Realized$ / (NetProceeds − Realized$) — NEVER the current Avg Cost cell.
+  assetList.forEach((asset, i) => {
+    const row = FIRST_SUMMARY_ROW + i;
+    const a = `$A${row}`; // this summary row's asset id (SUMIFS criterion)
+    const sellFilter = `$C$${dataAnchor}:$C,"SELL"`;
+    const assetFilter = `$B$${dataAnchor}:$B,${a}`;
+    const soldQty = `SUMIFS($E$${dataAnchor}:$E,${assetFilter},${sellFilter})`;
+    const netProceeds =
+      `SUMIFS($F$${dataAnchor}:$F,${assetFilter},${sellFilter}) - ` +
+      `SUMIFS($G$${dataAnchor}:$G,${assetFilter},${sellFilter})`;
+    // Realized $ : SUM the col-J helper for this asset's SELL rows.
+    const realizedDollars = `SUMIFS($J$${dataAnchor}:$J,${assetFilter},${sellFilter})`;
+    const realizedPct = `${realizedDollars} / ( ${netProceeds} - ${realizedDollars} )`;
+    const realizedFormulas = [
+      // Sold Qty (H)
+      `=IFERROR(${soldQty},"—")`,
+      // Net Proceeds (I)
+      `=IFERROR(${netProceeds},"—")`,
+      // Realized $ (J)
+      `=IFERROR(${realizedDollars},"—")`,
+      // Realized % (K)
+      `=IFERROR(${realizedPct},"—")`,
+    ];
+    requests.push(formulaRowRequest(sheetId, row, 8, realizedFormulas));
+  });
+
+  // Portfolio Total Realized cell (D-03 / D-06): a SINGLE summary-band cell summing the
+  // per-asset Realized $ column (col J) over the used summary rows (2..1+N). Placed in the
+  // summary header row (row 1) at col L (12) — the "Total Realized" labeled column — so it
+  // is NOT in the data region and NOT on the Dashboard. SUM skips the "—" text leaves.
+  const totalRealizedCol = 12; // col L (1-based)
+  const totalRealized = `=IFERROR(SUM($J$${FIRST_SUMMARY_ROW}:$J$${1 + assetList.length}),"—")`;
+  requests.push(formulaRowRequest(sheetId, SUMMARY_HEADER_ROW, totalRealizedCol, [totalRealized]));
+
+  // Phase 6 realized-block number formats over the reserved summary block (rows 2..21),
+  // still strictly above the data region (endRowIndex 21 < boundary 22). Sold Qty (H),
+  // Net Proceeds (I), Realized $ (J) are currency; Realized % (K) is percent.
+  requests.push(numberFormatRequest(sheetId, FIRST_SUMMARY_ROW, LAST_RESERVED_SUMMARY_ROW, 8, 8, CURRENCY_FORMAT));
+  requests.push(numberFormatRequest(sheetId, FIRST_SUMMARY_ROW, LAST_RESERVED_SUMMARY_ROW, 9, 9, CURRENCY_FORMAT));
+  requests.push(numberFormatRequest(sheetId, FIRST_SUMMARY_ROW, LAST_RESERVED_SUMMARY_ROW, 10, 10, CURRENCY_FORMAT));
+  requests.push(numberFormatRequest(sheetId, FIRST_SUMMARY_ROW, LAST_RESERVED_SUMMARY_ROW, 11, 11, PERCENT_FORMAT));
+
   // Summary number formats span the FULL reserved block (rows 2..1+MAX_SUMMARY_ROWS = 2-21),
   // not just the used rows — the reserved rows are still strictly above the data region
   // (endRowIndex = MAX_SUMMARY_ROWS + 1 = 21, exclusive 21 < boundary 22). Formats are
@@ -204,8 +272,31 @@ function bandRequests(sheetId, assetList = assets) {
   // over the same reserved block. Still strictly above the data region (endRowIndex 21 < 22).
   requests.push(numberFormatRequest(sheetId, FIRST_SUMMARY_ROW, reservedEnd, 6, 6, DATE_FORMAT));
 
-  // Transaction header row (cols A-I), immediately above the data region.
+  // Transaction header row (cols A-J), immediately above the data region.
   requests.push(labelRowRequest(sheetId, TX_HEADER_ROW, 1, TX_HEADERS));
+
+  // Phase 6 (D-02): the per-row REALIZED spill. A SINGLE write to row 22 (TX_HEADER_ROW =
+  // DATA_START_ROW − 1), col J (10), replacing the col-J "Realized" header text with the
+  // BYROW spill formula. The formula's A23:I open-ended ranges live ONLY inside the formula
+  // STRING — the request range is row 22 only, so the data region is never addressed (D-06).
+  //
+  // WHOLE-ROW BYROW(A:I) construction (RESEARCH lines 266-277, recommended): each row's own
+  // cells are read positionally via INDEX(r,1,n), avoiding the duplicate-date MATCH bug. For
+  // each data row: blank → ""; non-SELL → ""; SELL → (Total−Fee) − Qty × avgCostAsOf(date),
+  // where avgCostAsOf = BUY-weighted running average over BUY rows dated <= the SELL date.
+  // IFERROR guards a SELL dated before any BUY (no cost basis yet) → "—". This write MUST
+  // come AFTER the TX header label so the spill formula wins the J22 cell.
+  const da = dataAnchor;
+  const realizedHeaderFormula =
+    `=BYROW(A${da}:I${da}, LAMBDA(r, LET(` +
+    `d, INDEX(r,1,1), ty, INDEX(r,1,3), q, INDEX(r,1,5), tot, INDEX(r,1,6), fee, INDEX(r,1,7), ` +
+    `IF(d="","", ` +
+    `IF(ty<>"SELL","", ` +
+    `IFERROR((tot-fee) - q * ( ` +
+    `SUMIFS(H${da}:H, C${da}:C,"BUY", A${da}:A,"<="&d) / ` +
+    `SUMIFS(E${da}:E, C${da}:C,"BUY", A${da}:A,"<="&d) ` +
+    `),"—"))))))`;
+  requests.push(formulaRowRequest(sheetId, TX_HEADER_ROW, 10, [realizedHeaderFormula]));
 
   // Number format for the transaction header row's Date column only (header text row).
   // NOTE: we deliberately format only the header row, NOT the data region below it —
