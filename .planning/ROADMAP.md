@@ -165,10 +165,16 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 **Goal:** A user can log SELL transactions in the DCA Log and see realized PnL per asset (sale proceeds vs DCA-weighted cost basis) alongside the existing unrealized PnL, without breaking Phase 5's BUY-only average-cost summary block.
 **Requirements**: PNL-05 (promoted from v2)
 **Depends on:** Phase 5
-**Plans:** 3/3 plans complete
+**Plans:** 2 plans
 
 > **Scope note:** Phase 5 deliberately scopes cost basis to BUY rows only (Type=BUY filter) — SELL rows are ignored by the avg-cost/unrealized-PnL summary. Phase 6 introduces SELL semantics: realized PnL (proceeds − cost basis of units sold) per asset, and how SELL rows interact with the BUY-only average. Splitting this out keeps Phase 5's irreversible-data-loss-sensitive layout work focused on unrealized PnL.
 
 Plans:
 
-- [ ] TBD (run /gsd-plan-phase 6 to break down)
+**Wave 1**
+
+- [ ] 06-01-PLAN.md — Realized PnL builder: rename DCA_LOG → "Transaction Log", BYROW spill helper column, per-asset realized summary metrics (Sold Qty / Net Proceeds / Realized $ / Realized %), portfolio Total Realized, conditional formatting; updated offline tests
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 06-02-PLAN.md — Rename orchestration: old-title-aware in-place tab rename (updateSheetProperties field-mask, never delete+recreate), log-tab conditional pre-clear batch, Apps Script no-op verification; offline rename tests
