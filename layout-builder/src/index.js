@@ -21,13 +21,17 @@
 //         ad-hoc range write/clear, so the DCA Log transaction data region is never addressed.
 
 import { getSheetsClient } from "./auth.js";
-import { getSpreadsheetId, DASHBOARD, DCA_LOG } from "./config.js";
+import { getSpreadsheetId, DASHBOARD, DCA_LOG, DCA_LOG_LEGACY } from "./config.js";
 import {
   dashboardBuildRequests,
   dashboardUpdateRequests,
   dashboardConditionalPreClearRequests,
 } from "./dashboardSheet.js";
-import { dcaLogBuildRequests, dcaLogUpdateRequests } from "./dcaLogSheet.js";
+import {
+  dcaLogBuildRequests,
+  dcaLogUpdateRequests,
+  dcaLogConditionalPreClearRequests,
+} from "./dcaLogSheet.js";
 
 const USAGE =
   "Usage: node --env-file=.env src/index.js (--build | --update)\n" +
@@ -134,22 +138,59 @@ function isNoConditionalRuleAtIndexError(err) {
   return /No conditional format rule found at index/i.test(message);
 }
 
+// D-07: resolve the log tab by its CURRENT title (DCA_LOG = "Transaction Log") first,
+// then fall back to the LEGACY title (DCA_LOG_LEGACY = "DCA Log"). When only the legacy
+// title is present, emit a SINGLE updateSheetProperties(fields:"title") rename request —
+// a field-mask write that preserves every transaction data row (NEVER deleteSheet+addSheet,
+// the irreversible-data-loss guard, D-07 / Phase 2 D-06). When the new title already
+// resolves, emit NO rename (idempotent skip). Pure over a title->sheetId Map so it is
+// unit-testable offline without a live Sheets client. Returns { logId, renameRequests };
+// throws (mentioning BOTH titles) when neither is found.
+export function resolveLogTabRequests(tabs) {
+  const currentId = tabs.get(DCA_LOG);
+  if (currentId !== undefined) {
+    // Already titled "Transaction Log" — nothing to rename.
+    return { logId: currentId, renameRequests: [] };
+  }
+  const legacyId = tabs.get(DCA_LOG_LEGACY);
+  if (legacyId !== undefined) {
+    // In-place rename via field mask — mirrors freezeRowsRequest's updateSheetProperties
+    // shape. `fields: "title"` touches ONLY the title; all cell data is preserved.
+    return {
+      logId: legacyId,
+      renameRequests: [
+        {
+          updateSheetProperties: {
+            properties: { sheetId: legacyId, title: DCA_LOG },
+            fields: "title",
+          },
+        },
+      ],
+    };
+  }
+  throw new Error(
+    `--update requires the log tab ("${DCA_LOG}" or legacy "${DCA_LOG_LEGACY}") not found. ` +
+      "Run --build first to create the tab."
+  );
+}
+
 async function runUpdate(sheets, spreadsheetId) {
   const tabs = await getExistingTabs(sheets, spreadsheetId);
 
   const dashboardId = tabs.get(DASHBOARD);
-  const dcaLogId = tabs.get(DCA_LOG);
-  const missing = [];
-  if (dashboardId === undefined) missing.push(DASHBOARD);
-  if (dcaLogId === undefined) missing.push(DCA_LOG);
-  if (missing.length > 0) {
+  if (dashboardId === undefined) {
     throw new Error(
-      `--update requires existing tab(s): ${missing.join(", ")} not found. ` +
+      `--update requires existing tab: ${DASHBOARD} not found. ` +
         "Run --build first to create the tabs."
     );
   }
 
-  // WR-01: pre-clear the managed conditional-format rules in their OWN batchUpdate,
+  // D-07: discover the log tab (new title, else legacy) and, if still legacy-titled,
+  // produce the in-place rename request. The sheetId is stable across a rename, so the
+  // pre-clears below correctly target this id whether or not the title has changed yet.
+  const { logId: dcaLogId, renameRequests } = resolveLogTabRequests(tabs);
+
+  // WR-01: pre-clear the managed conditional-format rules in their OWN batchUpdate(s),
   // BEFORE the structural re-apply, so an out-of-range delete (live rule count drifted
   // below MANAGED_RULE_COUNT) can NEVER roll back the structural batch. We swallow ONLY
   // the "no rule at index" 400 — the deletes are best-effort idempotency hygiene, and the
@@ -160,17 +201,33 @@ async function runUpdate(sheets, spreadsheetId) {
   } catch (err) {
     if (!isNoConditionalRuleAtIndexError(err)) throw err;
     console.warn(
-      "Conditional-format pre-clear hit fewer than the expected managed rules " +
+      "Dashboard conditional-format pre-clear hit fewer than the expected managed rules " +
         "(live count drifted below 3); continuing — the structural re-apply re-adds them."
+    );
+  }
+
+  // D-07/Phase 6: the log tab now carries 2 managed conditional-format rules. Mirror the
+  // Dashboard pre-clear in its OWN error-tolerant batch (separate from the structural one)
+  // so a rule-count drift on the log tab can never roll back the structural re-apply.
+  try {
+    await batchUpdate(sheets, spreadsheetId, dcaLogConditionalPreClearRequests(dcaLogId));
+  } catch (err) {
+    if (!isNoConditionalRuleAtIndexError(err)) throw err;
+    console.warn(
+      "Log-tab conditional-format pre-clear hit fewer than the expected managed rules " +
+        "(live count drifted below 2); continuing — the structural re-apply re-adds them."
     );
   }
 
   // D-06: append ONLY the Plan 01 update builders (provably bounded above
   // DATA_START_ROW). No ad-hoc clear/write request is added here, so the DCA Log
-  // transaction data region is never addressed. Single batched call. The
-  // conditional-format ADD rules are still emitted here (dashboardUpdateRequests);
+  // transaction data region is never addressed. The rename request (D-07) is PREPENDED
+  // so the in-place title change lands in the same atomic structural batch as the
+  // re-apply; it is empty when the tab is already titled "Transaction Log". The
+  // conditional-format ADD rules are still emitted here (dashboard/dcaLog update);
   // only the positional DELETES were split out above (WR-01).
   const requests = [
+    ...renameRequests,
     ...dashboardUpdateRequests(dashboardId),
     ...dcaLogUpdateRequests(dcaLogId),
   ];
@@ -178,7 +235,7 @@ async function runUpdate(sheets, spreadsheetId) {
 
   console.log(
     `Re-applied structure to ${DASHBOARD} and ${DCA_LOG} ` +
-      "(DCA Log transaction data untouched)."
+      "(transaction data untouched)."
   );
 }
 
