@@ -102,10 +102,25 @@ test("conditional-format rules target Zone A PnL cols H+I and Zone B Drift col D
 test("--update emits deleteConditionalFormatRule so re-running never stacks rule count (T-05-03)", () => {
   const reqs = dashboardUpdateRequests(GRID_ID);
   const adds = reqs.filter((r) => r.addConditionalFormatRule).length;
-  const deletes = reqs.filter((r) => r.deleteConditionalFormatRule).length;
+  const deletes = reqs.filter((r) => r.deleteConditionalFormatRule);
   expect(adds).toBeGreaterThan(0);
   // One delete per managed rule (delete-then-add) so the final rule count is stable.
-  expect(deletes).toBe(adds);
+  expect(deletes.length).toBe(adds);
+  // Exactly 3 managed rules, pre-cleared in DESCENDING index order ([2, 1, 0]) so each
+  // delete at the current top index removes one rule while keeping remaining indices stable.
+  expect(deletes.map((r) => r.deleteConditionalFormatRule.index)).toEqual([2, 1, 0]);
+});
+
+// CR-01: --build creates the Dashboard tab in the SAME atomic batchUpdate, so the tab has
+// 0 conditional-format rules. Emitting any deleteConditionalFormatRule would target a
+// nonexistent index, return 400, and roll back the entire atomic build. Build must emit
+// ZERO deletes; only --update (where 3 managed rules already exist) pre-clears them.
+test("--build emits zero deleteConditionalFormatRule requests (CR-01)", () => {
+  const reqs = dashboardBuildRequests(GRID_ID);
+  const deletes = reqs.filter((r) => r.deleteConditionalFormatRule);
+  expect(deletes.length).toBe(0);
+  // The add rules are still emitted on build (the fresh tab gets all 3 managed rules).
+  expect(reqs.filter((r) => r.addConditionalFormatRule).length).toBeGreaterThan(0);
 });
 
 // CR-01 guard: a registry larger than MAX_ZONE_A_ASSET_ROWS must fail loudly rather than

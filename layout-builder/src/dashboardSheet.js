@@ -188,22 +188,35 @@ function deleteConditionalFormatRuleRequest(sheetId, index) {
 // The Dashboard conditional-format rules (D-07): green PnL>0 / red PnL<0 on cols H+I
 // over Zone A asset rows, plus a red |drift|>=tolerance flag on Zone B col D. Emitted in
 // BOTH --build and --update. IDEMPOTENCY: addConditionalFormatRule STACKS on naive
-// re-add, so we emit deleteConditionalFormatRule for the managed indices FIRST, in
-// DESCENDING order ([N-1 .. 0]). Each delete at the current top index removes one managed
-// rule; descending order keeps the remaining target indices stable. On a fresh --build
-// (no rules) the deletes target indices that don't exist yet — the build/update flow in
-// index.js tolerates "no rule at index" so the pre-clear is a safe no-op on first run, and
-// re-running --update always converges to exactly MANAGED_RULE_COUNT rules (never grows).
+// re-add, so on --update we emit deleteConditionalFormatRule for the managed indices
+// FIRST, in DESCENDING order ([N-1 .. 0]). Each delete at the current top index removes
+// one managed rule; descending order keeps the remaining target indices stable.
+//
+// The pre-clear is gated on `preClearConditionalRules` because the two paths have
+// different invariants:
+//   --build: the tab is freshly created in the SAME atomic batchUpdate (see index.js
+//            runBuild) → it has 0 conditional-format rules → there is NOTHING to clear.
+//            index.js batches the build with NO per-request error tolerance, so a delete
+//            at a nonexistent index returns 400 "No conditional format rule found at
+//            index N" and rolls back the ENTIRE structural stamp. Pre-clearing on build
+//            BREAKS the build, so build passes preClearConditionalRules=false.
+//   --update: the tab previously had structuralRequests applied → it has exactly
+//            MANAGED_RULE_COUNT (3) managed rules → pre-clear deletes them so the re-add
+//            converges to exactly 3 rules (never grows). Update passes true.
 // 3 managed rules: green PnL>0 (H+I), red PnL<0 (H+I), red Drift |d|>=tol (Zone B D).
 // Each rule spans its full column range, so PnL is one green + one red rule (not per-col).
 const MANAGED_RULE_COUNT = 3;
 
-function conditionalFormatRequests(sheetId, zoneAFirstAssetRow, zoneATotalRow, zoneBFirstAssetRow, zoneBTotalsRow) {
+function conditionalFormatRequests(sheetId, zoneAFirstAssetRow, zoneATotalRow, zoneBFirstAssetRow, zoneBTotalsRow, preClearConditionalRules) {
   const requests = [];
 
   // Pre-clear managed rules in DESCENDING index order so re-running --update never stacks.
-  for (let i = MANAGED_RULE_COUNT - 1; i >= 0; i--) {
-    requests.push(deleteConditionalFormatRuleRequest(sheetId, i));
+  // Only on --update: a fresh --build tab has 0 rules and deleting a nonexistent index
+  // rolls back the whole atomic build batch (index.js has no per-request error tolerance).
+  if (preClearConditionalRules) {
+    for (let i = MANAGED_RULE_COUNT - 1; i >= 0; i--) {
+      requests.push(deleteConditionalFormatRuleRequest(sheetId, i));
+    }
   }
 
   // Zone A PnL $ (col H = 0-based 7) + PnL % (col I = 0-based 8) over per-asset rows.
@@ -254,7 +267,12 @@ function freezeHeaderRequest(sheetId) {
 // `assetList` defaults to the shared registry; an explicit list is accepted only so the
 // overflow guard and Zone A/Zone B boundary-invariance can be exercised without mutating
 // the import (mirrors dcaLogSheet.js `bandRequests`).
-function structuralRequests(sheetId, assetList = assets) {
+//
+// `preClearConditionalRules` gates the conditional-format pre-clear deletes: false on
+// --build (fresh tab, 0 rules, deletes would roll back the atomic build batch), true on
+// --update (3 managed rules already present, pre-clear prevents stacking). See
+// conditionalFormatRequests for the full invariant.
+function structuralRequests(sheetId, assetList = assets, preClearConditionalRules = false) {
   // FAIL LOUDLY rather than silently overwrite Zone B. If the registry outgrows the
   // rows reserved above Zone B's pinned header, Zone A's TOTAL/label rows would stamp
   // onto Zone B's header and data — the exact "registry growth corrupts layout" defect
@@ -393,10 +411,12 @@ function structuralRequests(sheetId, assetList = assets) {
   });
 
   // Conditional-format rules (D-07): green/red PnL fills (Zone A H+I) + red Drift flag
-  // (Zone B D), with delete-then-add idempotency so --update never stacks duplicates.
-  // Emitted in BOTH build and update (structuralRequests is shared by both).
+  // (Zone B D). The add requests are emitted in BOTH build and update; the delete-then-add
+  // pre-clear (idempotency so --update never stacks duplicates) is gated on
+  // preClearConditionalRules — emitted only on --update, since a fresh --build tab has 0
+  // rules and a delete at a nonexistent index would roll back the atomic build batch.
   requests.push(
-    ...conditionalFormatRequests(sheetId, zoneAFirstAssetRow, zoneATotalRow, zoneBFirstAssetRow, zoneBTotalsRow)
+    ...conditionalFormatRequests(sheetId, zoneAFirstAssetRow, zoneATotalRow, zoneBFirstAssetRow, zoneBTotalsRow, preClearConditionalRules)
   );
 
   return requests;
@@ -406,13 +426,17 @@ function structuralRequests(sheetId, assetList = assets) {
 // `assetList` defaults to the shared registry (tests pass an explicit list to drive the
 // overflow guard / Zone A-Zone B boundary-invariance without mutating the import).
 export function dashboardBuildRequests(sheetId, assetList = assets) {
-  return structuralRequests(sheetId, assetList);
+  // Build path: fresh tab with 0 conditional-format rules → do NOT pre-clear (deleting a
+  // nonexistent rule index rolls back the atomic build batch in index.js).
+  return structuralRequests(sheetId, assetList, false);
 }
 
 // Re-apply the Dashboard structure idempotently (--update). No protected data region
 // on the Dashboard, so this mirrors the build structural ranges (labels/formats/frozen).
 export function dashboardUpdateRequests(sheetId, assetList = assets) {
-  return structuralRequests(sheetId, assetList);
+  // Update path: tab already has exactly MANAGED_RULE_COUNT (3) managed rules → pre-clear
+  // them in descending order so the re-add converges to 3 (never stacks duplicates).
+  return structuralRequests(sheetId, assetList, true);
 }
 
 // Re-export the Zone B header row and Zone A cap so tests can assert the no-collision
