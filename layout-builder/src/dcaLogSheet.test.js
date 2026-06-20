@@ -10,7 +10,11 @@ import "./testEnv.js";
 import { test, expect } from "bun:test";
 import assets from "../../assets.json" with { type: "json" };
 import { DATA_START_ROW, MAX_SUMMARY_ROWS } from "./config.js";
-import { dcaLogBuildRequests, dcaLogUpdateRequests } from "./dcaLogSheet.js";
+import {
+  dcaLogBuildRequests,
+  dcaLogUpdateRequests,
+  dcaLogConditionalPreClearRequests,
+} from "./dcaLogSheet.js";
 
 const GRID_ID = 0;
 
@@ -30,6 +34,7 @@ const EXPECTED_HEADERS = [
   "Fee",
   "Net Cost",
   "Notes",
+  "Realized", // Phase 6 (D-02): the 10th column = per-row realized-PnL helper (col J)
 ];
 
 // 0-based index of the first DATA row, DERIVED FROM THE HARD LITERAL (23 - 1 = 22) so the
@@ -135,17 +140,48 @@ test("a full-capacity registry (MAX_SUMMARY_ROWS assets) still respects the fixe
   expect(maxEndRowIndex(reqs)).toBeLessThanOrEqual(DATA_START_ROW_0BASED);
 });
 
-test("summary block now emits formulas; still no conditional formatting on the DCA Log tab (D-04/D-07)", () => {
+test("summary band emits formulas AND the Transaction Log tab now has conditional formatting (D-04/D-07)", () => {
   const build = JSON.stringify(dcaLogBuildRequests(GRID_ID));
   const update = JSON.stringify(dcaLogUpdateRequests(GRID_ID));
-  // Phase 5 INVERSION (D-04): the summary band now carries BUY-only cost-basis formulas.
+  // Phase 5 INVERSION (D-04): the summary band carries BUY-only cost-basis formulas.
   expect(build).toContain("formulaValue");
   expect(build).toContain("SUMIFS");
   expect(update).toContain("formulaValue");
   expect(update).toContain("SUMIFS");
-  // STILL no conditional formatting on the DCA Log tab — only the Dashboard gets it (D-07).
-  expect(build).not.toContain("addConditionalFormatRule");
-  expect(update).not.toContain("addConditionalFormatRule");
+  // Phase 6 INVERSION (D-07): the log tab now reuses the Dashboard green/red conditional
+  // formatting on the Realized $/Realized % summary cells — both build and update add rules.
+  expect(build).toContain("addConditionalFormatRule");
+  expect(update).toContain("addConditionalFormatRule");
+  // Build is add-only (fresh tab, 0 rules → no pre-clear); update pre-clears (descending)
+  // before re-adding so re-running --update never stacks duplicate rules.
+  expect(build).not.toContain("deleteConditionalFormatRule");
+  expect(update).toContain("deleteConditionalFormatRule");
+});
+
+test("Realized realized PnL: SELL summary + BYROW row-22 spill + em-dash leaves (D-02/D-06)", () => {
+  const build = JSON.stringify(dcaLogBuildRequests(GRID_ID));
+  // Per-asset realized summary uses a SELL-only filter (escaped quotes in the JSON).
+  expect(build).toContain(',\\"SELL\\"');
+  // The BYROW per-row spill is anchored at the header cell: row 22 (0-based 21), col J (9).
+  const reqs = dcaLogBuildRequests(GRID_ID);
+  const spill = reqs.find(
+    (r) => r?.updateCells?.rows?.[0]?.values?.[0]?.userEnteredValue?.formulaValue?.includes("BYROW")
+  );
+  expect(spill).toBeDefined();
+  expect(spill.updateCells.start.rowIndex).toBe(21);
+  expect(spill.updateCells.start.columnIndex).toBe(9);
+  // Exactly one BYROW spill (single header-cell, never per-row data-region writes).
+  expect((build.match(/BYROW/g) || []).length).toBe(1);
+  // Every realized leaf is IFERROR(…, "—") so empty/pre-BUY sells read "—" not #VALUE/#DIV.
+  expect(build).toContain("IFERROR");
+  expect(build).toContain("—");
+});
+
+test("dcaLogConditionalPreClearRequests returns the 2 descending-index deletes [1, 0]", () => {
+  const pre = dcaLogConditionalPreClearRequests(GRID_ID);
+  expect(pre.length).toBe(2);
+  expect(pre[0].deleteConditionalFormatRule.index).toBe(1);
+  expect(pre[1].deleteConditionalFormatRule.index).toBe(0);
 });
 
 test("summary formulas are BUY-only and use the em-dash empty state (D-04/D-06)", () => {
@@ -189,7 +225,14 @@ function extractRanges(req) {
   }
   if (req.repeatCell?.range) ranges.push(req.repeatCell.range);
   if (req.updateBorders) ranges.push(req.updateBorders);
-  // updateSheetProperties (frozen rows) addresses no data range — skip safely.
+  // Phase 6: addConditionalFormatRule carries its target range(s) under rule.ranges. The
+  // critical data-region guard must see them too — every conditional range stays in the
+  // summary band (endRowIndex = 1+assets.length << 22), never the data region.
+  if (req.addConditionalFormatRule?.rule?.ranges) {
+    for (const range of req.addConditionalFormatRule.rule.ranges) ranges.push(range);
+  }
+  // deleteConditionalFormatRule / updateSheetProperties (frozen rows) address no data
+  // range — skip safely.
 
   return ranges;
 }
