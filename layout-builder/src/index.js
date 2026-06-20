@@ -20,6 +20,7 @@
 //         bounded above DATA_START_ROW (proven by Plan 01 unit test). This file adds NO
 //         ad-hoc range write/clear, so the DCA Log transaction data region is never addressed.
 
+import { pathToFileURL } from "node:url";
 import { getSheetsClient } from "./auth.js";
 import { getSpreadsheetId, DASHBOARD, DCA_LOG, DCA_LOG_LEGACY } from "./config.js";
 import {
@@ -257,16 +258,27 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  // Actionable surface for the common operator-facing failures: usage, missing key
-  // file, sheet-not-shared (403), missing SPREADSHEET_ID (thrown at config import).
-  const message = err && err.message ? err.message : String(err);
-  console.error(message);
-  console.error(
-    "\nIf this is an auth/API error, verify: " +
-      "(1) layout-builder/service-account.key.json exists, " +
-      "(2) the target spreadsheet is shared with the service-account email as Editor, " +
-      "(3) SPREADSHEET_ID is set in a gitignored .env (run via node --env-file=.env)."
-  );
-  process.exit(1);
-});
+// Run the CLI only when invoked directly (node --env-file=.env src/index.js ...), NOT when
+// imported by a test or another module — index.test.js imports resolveLogTabRequests for
+// offline assertions and must not trigger main()/process.exit. `import.meta.main` covers
+// Bun and Node >= 24; the pathToFileURL comparison is the cross-runtime fallback.
+const invokedDirectly =
+  import.meta.main ??
+  (process.argv[1] != null &&
+    import.meta.url === pathToFileURL(process.argv[1]).href);
+
+if (invokedDirectly) {
+  main().catch((err) => {
+    // Actionable surface for the common operator-facing failures: usage, missing key
+    // file, sheet-not-shared (403), missing SPREADSHEET_ID (thrown at config import).
+    const message = err && err.message ? err.message : String(err);
+    console.error(message);
+    console.error(
+      "\nIf this is an auth/API error, verify: " +
+        "(1) layout-builder/service-account.key.json exists, " +
+        "(2) the target spreadsheet is shared with the service-account email as Editor, " +
+        "(3) SPREADSHEET_ID is set in a gitignored .env (run via node --env-file=.env)."
+    );
+    process.exit(1);
+  });
+}
