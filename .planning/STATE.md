@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 5 context gathered
-last_updated: "2026-06-20T05:30:26.140Z"
+stopped_at: Phase 6 context gathered
+last_updated: "2026-06-20T10:25:45.308Z"
 last_activity: 2026-06-20
 progress:
   total_phases: 6
@@ -96,9 +96,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-06-19T14:22:22.591Z
-Stopped at: Phase 5 context gathered
-Resume file: .planning/phases/05-pnl-allocation/05-CONTEXT.md
+Last session: 2026-06-20T10:25:45.301Z
+Stopped at: Phase 6 context gathered
+Resume file: .planning/phases/06-realized-pnl-and-sell-log/06-CONTEXT.md
 
 ### Note (04-03 Task 1 deviation)
 
