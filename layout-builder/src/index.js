@@ -129,14 +129,23 @@ async function runBuild(sheets, spreadsheetId) {
 
 // --- --update (LAYOUT-02 + D-06: structural-only, never the data region) --------
 
-// WR-01: true only for the Sheets API's out-of-range conditional-format-delete error
-// ("No conditional format rule found at index N"). This is the EXPECTED outcome when the
-// live managed-rule count has drifted below MANAGED_RULE_COUNT (a rule deleted via the UI
-// or a prior partial run). Only this specific 400 is tolerated during the pre-clear; any
-// other error (auth, missing sheet, malformed request) must still surface loudly.
-function isNoConditionalRuleAtIndexError(err) {
+// WR-01: true only for the Sheets API's out-of-range conditional-format-delete error.
+// The LIVE API (confirmed against the spreadsheet) returns the deleteConditionalFormatRule
+// error verbatim as:
+//   "Invalid requests[0].deleteConditionalFormatRule: No conditional format on sheet: <id> at index: <n>"
+// Older/legacy phrasing (kept for backward compatibility) is:
+//   "No conditional format rule found at index <n>"
+// Both are the EXPECTED outcome when the live managed-rule count has drifted below
+// MANAGED_RULE_COUNT (a rule deleted via the UI or a prior partial run). Only this specific
+// 400 is tolerated during the pre-clear; any other error (auth/PERMISSION_DENIED, missing
+// sheet, malformed request) must still surface loudly — so the regex matches the stable
+// conditional-format-delete vocabulary, never a bare "index" substring.
+export function isNoConditionalRuleAtIndexError(err) {
   const message = err && err.message ? err.message : String(err);
-  return /No conditional format rule found at index/i.test(message);
+  return (
+    /no conditional format rule found at index/i.test(message) ||
+    /no conditional format on sheet:.*at index:/i.test(message)
+  );
 }
 
 // D-07: resolve the log tab by its CURRENT title (DCA_LOG = "Transaction Log") first,

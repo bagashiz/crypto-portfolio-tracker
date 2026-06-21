@@ -10,7 +10,7 @@
 import "./testEnv.js";
 import { test, expect } from "bun:test";
 import { DCA_LOG, DCA_LOG_LEGACY } from "./config.js";
-import { resolveLogTabRequests } from "./index.js";
+import { resolveLogTabRequests, isNoConditionalRuleAtIndexError } from "./index.js";
 
 // Sanity: the rename target/source titles are the Phase 5/6 values the rest of the suite assumes.
 test("config titles: DCA_LOG is the new title, DCA_LOG_LEGACY is the old one", () => {
@@ -86,4 +86,29 @@ test("rename request is data-preserving: field mask is exactly 'title'", () => {
     ])
   );
   expect(renameRequests[0].updateSheetProperties.fields).toBe("title");
+});
+
+// WR-01 regression: the --update conditional-format pre-clear tolerance matcher must
+// recognize BOTH the REAL live Sheets API phrasing and the legacy phrasing, while
+// rejecting unrelated (auth / missing-sheet / malformed) errors so they surface loudly.
+test("isNoConditionalRuleAtIndexError accepts the REAL Sheets API delete message", () => {
+  const err = new Error(
+    "Invalid requests[0].deleteConditionalFormatRule: No conditional format on sheet: 1 at index: 2"
+  );
+  expect(isNoConditionalRuleAtIndexError(err)).toBe(true);
+});
+
+test("isNoConditionalRuleAtIndexError still accepts the LEGACY delete message", () => {
+  const err = new Error("No conditional format rule found at index 0");
+  expect(isNoConditionalRuleAtIndexError(err)).toBe(true);
+});
+
+test("isNoConditionalRuleAtIndexError rejects an auth / permission error", () => {
+  const err = new Error("PERMISSION_DENIED: The caller does not have permission");
+  expect(isNoConditionalRuleAtIndexError(err)).toBe(false);
+});
+
+test("isNoConditionalRuleAtIndexError rejects unrelated missing-sheet / malformed errors", () => {
+  expect(isNoConditionalRuleAtIndexError(new Error("No sheet with id: 99"))).toBe(false);
+  expect(isNoConditionalRuleAtIndexError(new Error("Unable to parse range: foo"))).toBe(false);
 });
