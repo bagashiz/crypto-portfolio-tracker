@@ -5,11 +5,13 @@
  *   bun run sheet:build                 # apply every tab module
  *   bun run sheet:build summary         # apply just the Summary module
  *   bun run sheet:build --dry-run       # validate without writing
+ *   bun run sheet:build --reset         # tear down each tab's Table + CF rules first,
+ *                                       #   making a full rebuild safely re-runnable
  *
  * The desired structure lives in the per-tab modules; this runner resolves tab
- * titles -> sheetIds (the only live read) and sends the combined requests.
+ * titles -> sheet metadata (the only live read) and sends the combined requests.
  */
-import { gws, resolveSheetIds, type BuildContext, type TabModule } from "./lib.ts";
+import { gws, resolveSheetMeta, teardownRequests, type BuildContext, type SheetMeta, type TabModule } from "./lib.ts";
 import { summary } from "./summary.ts";
 import { holdings } from "./holdings.ts";
 import { transactions } from "./transactions.ts";
@@ -24,6 +26,7 @@ function spreadsheetId(): string {
 
 const args = process.argv.slice(2);
 const dryRun = args.includes("--dry-run");
+const reset = args.includes("--reset");
 const tab = args.find((a) => !a.startsWith("--"));
 
 const selected = tab
@@ -36,19 +39,19 @@ if (selected.length === 0) {
 }
 
 const ssid = spreadsheetId();
-const ids = await resolveSheetIds(ssid);
-const ctx: BuildContext = {
-  sheetId(title) {
-    const id = ids.get(title);
-    if (id === undefined) throw new Error(`Tab "${title}" not found in spreadsheet`);
-    return id;
-  },
-};
+const meta = await resolveSheetMeta(ssid);
+function metaOf(title: string): SheetMeta {
+  const m = meta.get(title);
+  if (!m) throw new Error(`Tab "${title}" not found in spreadsheet`);
+  return m;
+}
+const ctx: BuildContext = { sheetId: (title) => metaOf(title).sheetId };
 
 const requests = selected.flatMap((m) => {
-  const reqs = m.build(ctx);
-  console.log(`${m.title}: ${reqs.length} request(s)`);
-  return reqs;
+  const teardown = reset ? teardownRequests(metaOf(m.title)) : [];
+  const built = m.build(ctx);
+  console.log(`${m.title}: ${built.length} request(s)${reset ? ` (+${teardown.length} reset)` : ""}`);
+  return [...teardown, ...built];
 });
 
 if (requests.length === 0) {

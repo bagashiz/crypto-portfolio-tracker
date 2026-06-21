@@ -51,7 +51,7 @@ The dev loop: edit a tab's builder module → apply it → eyeball the live shee
 
 **Layout:** `sheets/apply.ts` resolves tab titles → sheetIds and runs each module's `batchUpdate` requests (`bun run sheet:build [tab] [--dry-run]`); per-tab modules are `holdings.ts`, `transactions.ts`, `summary.ts`; `sheets/lib.ts` holds the request helpers (`setCells`, `oneOfList`, `TABLE_BANDING`, `gws`, `resolveSheetIds`).
 
-> **Not idempotent against the already-built live tabs:** each module emits `addTable` + the CF rules for a *fresh* build, so re-applying onto the existing Holdings/Transactions will error on `addTable` and duplicate CF rules. Clear the tab (or comment out the structural requests) when refreshing only formulas/data. Always `--dry-run` first.
+**Re-running:** each module emits `addTable` + CF rules for a *fresh* build, so a plain re-run onto an already-built tab errors on `addTable` (the batch is atomic — nothing applies). Use **`--reset`** to make a full rebuild safely re-runnable: it tears down the tab's existing Table(s) and conditional-format rules (via `deleteTable` / `deleteConditionalFormatRule`) before re-adding, in the same atomic batch. For a content-only change (e.g. a formula tweak) just send the `setCells` portion — that's idempotent on its own. Always `--dry-run` first.
 
 ## Toolchain & commands
 
@@ -66,7 +66,7 @@ bun run as:pull          # remote Apps Script -> ./apps-script/src
 bun run as:push          # ./apps-script/src -> remote (replaces ALL files)
 bun run as:push --dry-run # validate the push without writing
 
-bun run sheet:build [tab] [--dry-run]   # apply the sheet builders (all tabs, or one)
+bun run sheet:build [tab] [--reset] [--dry-run]   # apply the sheet builders (all tabs, or one)
 ```
 
 ## Working with the remote via `gws`

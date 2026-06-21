@@ -78,17 +78,53 @@ export async function gws(args: string[]): Promise<string> {
   return stdout;
 }
 
-/** Read the spreadsheet's tab title -> sheetId map (the one live read the builder needs, at apply-time). */
-export async function resolveSheetIds(spreadsheetId: string): Promise<Map<string, number>> {
+export interface SheetMeta {
+  sheetId: number;
+  /** Ids of Tables defined on the tab (for teardown on --reset). */
+  tableIds: string[];
+  /** Count of conditional-format rules on the tab (for teardown on --reset). */
+  conditionalFormatCount: number;
+}
+
+/** Read each tab's id, tables, and conditional-format count (the one live read the builder needs, at apply-time). */
+export async function resolveSheetMeta(spreadsheetId: string): Promise<Map<string, SheetMeta>> {
   const out = await gws([
     "sheets",
     "spreadsheets",
     "get",
     "--params",
-    JSON.stringify({ spreadsheetId, fields: "sheets.properties(sheetId,title)" }),
+    JSON.stringify({ spreadsheetId, fields: "sheets(properties(sheetId,title),tables(tableId),conditionalFormats)" }),
     "--format",
     "json",
   ]);
-  const data = JSON.parse(out) as { sheets: { properties: { sheetId: number; title: string } }[] };
-  return new Map(data.sheets.map((s) => [s.properties.title, s.properties.sheetId]));
+  const data = JSON.parse(out) as {
+    sheets: {
+      properties: { sheetId: number; title: string };
+      tables?: { tableId: string }[];
+      conditionalFormats?: unknown[];
+    }[];
+  };
+  return new Map(
+    data.sheets.map((s) => [
+      s.properties.title,
+      {
+        sheetId: s.properties.sheetId,
+        tableIds: (s.tables ?? []).map((t) => t.tableId),
+        conditionalFormatCount: (s.conditionalFormats ?? []).length,
+      },
+    ]),
+  );
+}
+
+/**
+ * Requests that strip a tab's existing Table(s) and conditional-format rules, so a
+ * module's `addTable`/`addConditionalFormatRule` can re-run without erroring/duplicating.
+ * CF rules are deleted high index -> 0 so indices stay valid as the list shrinks.
+ */
+export function teardownRequests(meta: SheetMeta): SheetRequest[] {
+  const reqs: SheetRequest[] = meta.tableIds.map((tableId) => ({ deleteTable: { tableId } }));
+  for (let i = meta.conditionalFormatCount - 1; i >= 0; i--) {
+    reqs.push({ deleteConditionalFormatRule: { sheetId: meta.sheetId, index: i } });
+  }
+  return reqs;
 }
