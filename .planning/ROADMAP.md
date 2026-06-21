@@ -158,7 +158,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 3. Data Layer | 3/3 | Complete    | 2026-06-17 |
 | 4. Refresh & Caching | 3/3 | Complete    | 2026-06-17 |
 | 5. PnL & Allocation | 3/3 | Complete    | 2026-06-20 |
-| 6. Realized PnL & Sell Log | 2/2 | Complete   | 2026-06-20 |
+| 6. Realized PnL & Sell Log | 2/2 | Complete    | 2026-06-21 |
 
 ### Phase 6: Realized PnL & Sell Log
 

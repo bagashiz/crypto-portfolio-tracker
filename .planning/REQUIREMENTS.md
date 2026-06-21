@@ -44,7 +44,7 @@ Requirements for the initial release. Each maps to a roadmap phase.
 
 ### Realized PnL
 
-- [ ] **PNL-05**: User can log SELL transactions in the DCA Log and see realized PnL per asset (sale proceeds vs DCA-weighted cost basis), without breaking the BUY-only avg-cost summary (promoted from v2 — own phase, Phase 6)
+- [x] **PNL-05**: User can log SELL transactions in the DCA Log and see realized PnL per asset (sale proceeds vs DCA-weighted cost basis), without breaking the BUY-only avg-cost summary (promoted from v2 — own phase, Phase 6)
 
 ### Allocation Health
 
@@ -107,7 +107,7 @@ Which phases cover which requirements. Populated during roadmap creation.
 | PNL-04 | Phase 5 | Complete |
 | ALLOC-01 | Phase 5 | Complete |
 | ALLOC-02 | Phase 5 | Complete |
-| PNL-05 | Phase 6 | Pending |
+| PNL-05 | Phase 6 | Complete |
 
 **Coverage:**
 
