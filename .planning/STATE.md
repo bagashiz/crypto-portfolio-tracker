@@ -18,10 +18,10 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-06-13)
+See: .planning/PROJECT.md (updated 2026-06-21)
 
 **Core value:** See accurate unrealized PnL — live portfolio value measured against DCA-weighted cost basis — for the whole portfolio at a glance, refreshed automatically.
-**Current focus:** Phase 06 — realized-pnl-and-sell-log
+**Current focus:** v1.0 MVP shipped 2026-06-21 — planning next milestone (`/gsd-new-milestone`)
 
 ## Current Position
 
