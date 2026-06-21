@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-06-13)
 Phase: 06
 Plan: Not started
 Status: Executing Phase 06
-Last activity: 2026-06-21
+Last activity: 2026-06-21 - Completed quick task 260621-m70: fixed --update conditional-format pre-clear matcher (live --update now converges; log tab renamed to "Transaction Log")
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -87,6 +87,12 @@ None yet.
 
 - Phase 3 blocker (pre-build): Four Solana mint addresses (IVVon, PST, ONyc, USDy) and exact Hyperliquid XAUt ticker are unconfirmed — fail silently if wrong. Confirm before implementing provider modules.
 - Phase 3 blocker (pre-build): Solana RPC endpoint choice (public vs paid) unconfirmed — public endpoint will rate-limit at 5-min refresh.
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260621-m70 | Fix `--update` conditional-format pre-clear error tolerance (broaden matcher to real Sheets API message + regression test) | 2026-06-21 | 670ac15 | [260621-m70-fix-update-conditional-format-pre-clear-](./quick/260621-m70-fix-update-conditional-format-pre-clear-/) |
 
 ## Deferred Items
 
