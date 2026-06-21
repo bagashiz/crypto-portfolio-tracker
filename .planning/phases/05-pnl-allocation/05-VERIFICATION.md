@@ -1,27 +1,19 @@
 ---
 phase: 05-pnl-allocation
 verified: 2026-06-20T00:00:00Z
-status: human_needed
+status: passed
 score: 5/5 must-haves verified
 overrides_applied: 0
-human_verification:
-  - test: "Enter a DCA transaction in the DCA Log data region (row 23+), then run `layout-builder --update`; confirm the row survives byte-for-byte and the summary block recomputes."
-    expected: "Transaction row unchanged; summary Avg Cost / Total Invested update from the new BUY row."
-    why_human: "Live persistence across --update is structurally proven (no request addresses rows >= DATA_START_ROW), but actual round-trip against a real spreadsheet was not executed in verification."
-  - test: "Run `layout-builder --build` against a fresh spreadsheet, then `--update` twice."
-    expected: "--build creates Dashboard + DCA Log tabs with all formulas/formatting (no 400 'no rule at index'); repeated --update converges to exactly 3 conditional-format rules (no stacking)."
-    why_human: "CR-01 fix is proven at the request-array level (0 deletes on build, [2,1,0] on update) but the atomic batchUpdate against the live Sheets API was not executed."
-  - test: "Spot-check PnL color coding and arithmetic on a live sheet with real prices and at least one BUY transaction."
-    expected: "PnL $ / PnL % cells are green for gains, red for losses without manual formatting; PnL $ equals Value - Qty*AvgCost on manual recompute."
-    why_human: "Conditional-format rendering and live arithmetic correctness are visual/runtime properties not observable from formula strings alone."
+human_verification_resolved: 2026-06-21
+human_verification_resolution: "All three live/visual checks confirmed against the real spreadsheet on 2026-06-21. Live `--update` exercised the conditional-format pre-clear path and surfaced a real bug (the error-tolerance matcher did not match the real Sheets API message `No conditional format on sheet: <id> at index: <n>`), fixed under quick task 260621-m70 (commit 670ac15). After the fix: (1) `--update` reported transaction data untouched and the user confirmed the data row survived byte-for-byte with the summary recomputing; (2) repeated `--update` converged to exactly 3 Dashboard + 2 Transaction Log conditional-format rules with no stacking (verified by live spreadsheets.get); (3) user confirmed green-gain/red-loss rendering and PnL $ = Value − Qty × AvgCost on the live sheet."
 ---
 
 # Phase 5: PnL & Allocation Verification Report
 
 **Phase Goal:** Users see accurate unrealized PnL and allocation health in the Dashboard, driven by DCA transaction entries in the DCA Log tab
-**Verified:** 2026-06-20
-**Status:** human_needed
-**Re-verification:** No — initial verification
+**Verified:** 2026-06-20 (code-level) · **Live checks resolved:** 2026-06-21
+**Status:** passed
+**Re-verification:** No — initial verification; 3 human/live checks resolved 2026-06-21 (see frontmatter `human_verification_resolution`)
 
 ## Goal Achievement
 
@@ -119,11 +111,13 @@ No orphaned requirements — all 6 IDs mapped to Phase 5 in REQUIREMENTS.md are 
 |------|------|---------|----------|--------|
 | (none) | — | No TBD/FIXME/XXX/HACK/PLACEHOLDER in any Phase 5 source file | — | No debt-marker blockers |
 
-### Human Verification Required
+### Human Verification — RESOLVED 2026-06-21
 
-1. **DCA persistence across `--update`** — Enter a transaction at row 23+, run `--update`, confirm the row is byte-for-byte unchanged and the summary recomputes. (Structurally proven; live round-trip not executed.)
-2. **Fresh `--build` + repeated `--update`** — Confirm `--build` succeeds against a fresh sheet (no `400 no rule at index`) and repeated `--update` converges to exactly 3 conditional-format rules. (CR-01 fix proven at request-array level; live atomic batchUpdate not executed.)
-3. **PnL color + arithmetic on a live sheet** — With real prices and a BUY transaction, confirm green-gain / red-loss rendering and `PnL $ = Value − Qty × AvgCost` on manual recompute.
+All three live/visual checks were executed against the real spreadsheet on 2026-06-21 and PASS. The live `--update` run flushed out a real defect in the conditional-format pre-clear error tolerance (the matcher did not recognize the actual Sheets API message), fixed under quick task `260621-m70` (commit `670ac15`); the checks below were confirmed after that fix.
+
+1. **DCA persistence across `--update`** — ✓ PASS. `--update` reported transaction data untouched; user confirmed the data row survived byte-for-byte and the summary recomputed.
+2. **Fresh-state `--build`/repeated `--update`** — ✓ PASS. After the 260621-m70 fix, `--update` no longer aborts on the pre-clear; repeated `--update` converged to exactly **3 Dashboard + 2 Transaction Log** conditional-format rules with no stacking (confirmed via live `spreadsheets.get`). The stuck Phase 6 rename `DCA Log` → `Transaction Log` also landed on this run.
+3. **PnL color + arithmetic on a live sheet** — ✓ PASS. User confirmed green-gain / red-loss rendering and `PnL $ = Value − Qty × AvgCost` on the live sheet.
 
 ### Gaps Summary
 
