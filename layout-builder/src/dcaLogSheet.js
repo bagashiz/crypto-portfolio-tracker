@@ -182,7 +182,12 @@ function freezeRowsRequest(sheetId, count) {
 //
 // `assetList` defaults to the shared registry; an explicit list is accepted only so the
 // overflow guard and boundary-invariance can be exercised without mutating the import.
-function bandRequests(sheetId, assetList = assets, preClearConditionalRules = false) {
+//
+// The band is ADD-ONLY for conditional rules: it NEVER emits inline deletes. The managed
+// rule pre-clear is split into dcaLogConditionalPreClearRequests, sent by index.js in its
+// OWN error-tolerant batch (WR-01) — so a rule-count drift can never roll back this
+// structural batch. (Mirrors dashboardSheet.js: dashboardUpdateRequests is add-only too.)
+function bandRequests(sheetId, assetList = assets) {
   // FAIL LOUDLY rather than silently shift the boundary into the data region. If the
   // registry outgrows the reserved summary block, the operator must raise MAX_SUMMARY_ROWS
   // in config.js and re-run --build — never let the band creep onto live transactions.
@@ -313,18 +318,27 @@ function bandRequests(sheetId, assetList = assets, preClearConditionalRules = fa
 
   // Phase 6 (D-02): the per-row REALIZED spill. A SINGLE write to row 22 (TX_HEADER_ROW =
   // DATA_START_ROW − 1), col J (10), replacing the col-J "Realized" header text with the
-  // BYROW spill formula. The formula's A23:I open-ended ranges live ONLY inside the formula
-  // STRING — the request range is row 22 only, so the data region is never addressed (D-06).
+  // BYROW spill formula. The open-ended ranges live ONLY inside the formula STRING — the
+  // request range is row 22 only, so the data region is never addressed (D-06).
+  //
+  // SPILL ALIGNMENT (critical): BYROW returns one output row per INPUT row and spills DOWN
+  // from this anchor cell (J22). For output[k] to land on its own source row, the input's
+  // FIRST row MUST equal the anchor row — so the input is A{TX_HEADER_ROW}:I (A22:I), NOT
+  // A{DATA_START_ROW}:I. With A22:I: row 22 (the header strings) evaluates to "" (Type<>SELL)
+  // and lands harmlessly in J22, then row 23 → J23, row 24 → J24, … so the per-asset summary
+  // SUMIFS($J$23:$J, …) reads each SELL's realized value from its OWN data row. Anchoring the
+  // input at row 23 would shift every value up one cell and silently zero the summary.
   //
   // WHOLE-ROW BYROW(A:I) construction (RESEARCH lines 266-277, recommended): each row's own
   // cells are read positionally via INDEX(r,1,n), avoiding the duplicate-date MATCH bug. For
-  // each data row: blank → ""; non-SELL → ""; SELL → (Total−Fee) − Qty × avgCostAsOf(date),
-  // where avgCostAsOf = BUY-weighted running average over BUY rows dated <= the SELL date.
-  // IFERROR guards a SELL dated before any BUY (no cost basis yet) → "—". This write MUST
-  // come AFTER the TX header label so the spill formula wins the J22 cell.
+  // each row: header/blank → ""; non-SELL → ""; SELL → (Total−Fee) − Qty × avgCostAsOf(date),
+  // where avgCostAsOf = BUY-weighted running average over BUY rows dated <= the SELL date
+  // (inner SUMIFS stay anchored at the data region A{da}:A, da=23). IFERROR guards a SELL
+  // dated before any BUY (no cost basis yet) → "—". This write MUST come AFTER the TX header
+  // label so the spill formula wins the J22 cell.
   const da = dataAnchor;
   const realizedHeaderFormula =
-    `=BYROW(A${da}:I${da}, LAMBDA(r, LET(` +
+    `=BYROW(A${TX_HEADER_ROW}:I, LAMBDA(r, LET(` +
     `d, INDEX(r,1,1), ty, INDEX(r,1,3), q, INDEX(r,1,5), tot, INDEX(r,1,6), fee, INDEX(r,1,7), ` +
     `IF(d="","", ` +
     `IF(ty<>"SELL","", ` +
@@ -343,14 +357,11 @@ function bandRequests(sheetId, assetList = assets, preClearConditionalRules = fa
   // Phase 6 (D-07): green/red conditional formatting on the Realized $ (col J, 0-based 9)
   // and Realized % (col K, 0-based 10) summary cells over the per-asset rows (rows 2..1+N,
   // 0-based startRowIndex 1 .. endRowIndex 1+N). The range ends well above row 22 (summary
-  // band only) — no data-region concern (the critical guard stays green). On --update the
-  // managed rules are pre-cleared in DESCENDING index order before re-adding (idempotency);
-  // on --build no deletes are emitted (fresh tab, 0 rules).
-  if (preClearConditionalRules) {
-    for (let i = DCA_LOG_MANAGED_RULE_COUNT - 1; i >= 0; i--) {
-      requests.push(deleteConditionalFormatRuleRequest(sheetId, i));
-    }
-  }
+  // band only) — no data-region concern (the critical guard stays green). This band is
+  // ADD-ONLY: the managed-rule pre-clear (descending deletes) is emitted separately by
+  // dcaLogConditionalPreClearRequests and sent by index.js in its own error-tolerant batch,
+  // so a rule-count drift can never roll back this structural re-apply (WR-01/WR-02). On
+  // --build the isolated pre-clear runs on a 0-rule tab and tolerantly no-ops.
   const realizedRange = {
     startRowIndex: FIRST_SUMMARY_ROW - 1, // 0-based 1 (row 2)
     endRowIndex: 1 + assetList.length, // exclusive; last per-asset row is 1+N (1-based)
@@ -371,16 +382,19 @@ function bandRequests(sheetId, assetList = assets, preClearConditionalRules = fa
 export function dcaLogBuildRequests(sheetId, assetList = assets) {
   // Build: add-only conditional rules (the tab is freshly created in the same atomic
   // batchUpdate, so it has 0 rules to pre-clear).
-  return bandRequests(sheetId, assetList, false);
+  return bandRequests(sheetId, assetList);
 }
 
 // Re-apply ONLY the structural band (--update). The transaction data region at and
 // below DATA_START_ROW is never addressed — no write, no clear — so re-running --update
 // leaves DCA Log data byte-for-byte unchanged and "twice == once" (D-06, LAYOUT-02).
 export function dcaLogUpdateRequests(sheetId, assetList = assets) {
-  // Update: pre-clear the managed conditional rules (descending index) before re-adding so
-  // re-running --update never stacks duplicate rules and converges to exactly 2.
-  return bandRequests(sheetId, assetList, true);
+  // Update: ADD-ONLY structural band (no inline deletes). The managed conditional rules are
+  // pre-cleared by dcaLogConditionalPreClearRequests, which index.js sends in its OWN
+  // error-tolerant batch BEFORE this structural batch (WR-01/WR-02). Emitting the deletes
+  // here too would (a) double-delete and (b) throw inside the un-tolerant structural batch
+  // once the isolated pre-clear has already removed the rules — rolling back the re-apply.
+  return bandRequests(sheetId, assetList);
 }
 
 // The descending-index conditional-format pre-clear deletes for --update, isolated so

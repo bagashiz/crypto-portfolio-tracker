@@ -152,10 +152,13 @@ test("summary band emits formulas AND the Transaction Log tab now has conditiona
   // formatting on the Realized $/Realized % summary cells — both build and update add rules.
   expect(build).toContain("addConditionalFormatRule");
   expect(update).toContain("addConditionalFormatRule");
-  // Build is add-only (fresh tab, 0 rules → no pre-clear); update pre-clears (descending)
-  // before re-adding so re-running --update never stacks duplicate rules.
+  // Both build AND update are ADD-ONLY (no inline deletes). The managed-rule pre-clear is
+  // split into dcaLogConditionalPreClearRequests (sent by index.js in its own error-tolerant
+  // batch, WR-01/WR-02). Emitting deletes inline here would double-delete and then throw
+  // inside the un-tolerant structural batch once the isolated pre-clear had already removed
+  // the rules — rolling back the entire structural re-apply.
   expect(build).not.toContain("deleteConditionalFormatRule");
-  expect(update).toContain("deleteConditionalFormatRule");
+  expect(update).not.toContain("deleteConditionalFormatRule");
 });
 
 test("Realized realized PnL: SELL summary + BYROW row-22 spill + em-dash leaves (D-02/D-06)", () => {
@@ -175,6 +178,27 @@ test("Realized realized PnL: SELL summary + BYROW row-22 spill + em-dash leaves 
   // Every realized leaf is IFERROR(…, "—") so empty/pre-BUY sells read "—" not #VALUE/#DIV.
   expect(build).toContain("IFERROR");
   expect(build).toContain("—");
+});
+
+// CR-01 regression: the BYROW input MUST be open-ended over rows and anchored at the SPILL
+// CELL's row (the header row, 22), not the data-start row. BYROW spills downward from the
+// anchor producing one output per input row; if the input started at row 23 the realized
+// value for row 23 would land in J22 and every value would shift up one cell, silently
+// zeroing the per-asset SUMIFS($J$23:$J,…) summary. A single-row input (A23:I23) computes
+// realized for one row only. Anchor row = TX_HEADER_ROW = DATA_START_ROW - 1 = 22.
+test("CR-01: BYROW input is open-ended and anchored at the spill cell's row (A22:I), not the data row", () => {
+  const spillFormula = findSpillFormula(dcaLogBuildRequests(GRID_ID));
+  expect(spillFormula).toBeDefined();
+  // Open-ended rows, bounded cols A..I, first row == the spill anchor row (22).
+  const anchorRow = DATA_START_ROW_LITERAL - 1; // 22
+  expect(spillFormula).toContain(`BYROW(A${anchorRow}:I,`);
+  // NOT a single-row input (would compute realized for one row only).
+  expect(spillFormula).not.toContain(`A${anchorRow}:I${anchorRow}`); // A22:I22
+  expect(spillFormula).not.toContain(`A${DATA_START_ROW_LITERAL}:I${DATA_START_ROW_LITERAL}`); // A23:I23
+  // NOT anchored at the data row (off-by-one: would shift the whole spill up by one cell).
+  expect(spillFormula).not.toContain(`BYROW(A${DATA_START_ROW_LITERAL}:I`); // A23:I…
+  // The inner BUY-aggregation SUMIFS still read the DATA region (row 23+), not the header row.
+  expect(spillFormula).toContain(`C${DATA_START_ROW_LITERAL}:C,"BUY"`);
 });
 
 test("dcaLogConditionalPreClearRequests returns the 2 descending-index deletes [1, 0]", () => {
@@ -203,6 +227,15 @@ test("dcaLogUpdateRequests is deterministic (update twice == once)", () => {
 });
 
 // --- helpers ---
+
+// The single BYROW per-row realized spill formula string (col-J header-cell write), or
+// undefined if absent.
+function findSpillFormula(reqs) {
+  const spill = reqs.find((r) =>
+    r?.updateCells?.rows?.[0]?.values?.[0]?.userEnteredValue?.formulaValue?.includes("BYROW")
+  );
+  return spill?.updateCells?.rows?.[0]?.values?.[0]?.userEnteredValue?.formulaValue;
+}
 
 // Extract every grid range referenced by a single request object, normalized so each
 // has rowIndex bounds we can assert against. Covers updateCells (start-based, single
