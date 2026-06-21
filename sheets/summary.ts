@@ -1,5 +1,4 @@
-import type { BuildContext, SheetRequest, TabModule } from "./lib.ts";
-// import { setCells } from "./lib.ts";
+import type { BuildContext, BuildResult, TabModule } from "./lib.ts";
 
 /**
  * Summary tab — the portfolio overview. Currently empty; build it out here.
@@ -9,16 +8,15 @@ import type { BuildContext, SheetRequest, TabModule } from "./lib.ts";
  */
 export const summary: TabModule = {
   title: "Summary",
-  build(_ctx: BuildContext): SheetRequest[] {
-    // TODO: define the Summary layout. Example (rows/cols are 0-indexed):
+  build(_ctx: BuildContext): BuildResult {
+    // TODO: define the Summary layout. `structure` holds batchUpdate requests (formats,
+    // merges, ...); `values` holds cell content via the values API (import `valuesAt`):
     //
-    //   return [
-    //     setCells(_ctx.sheetId("Summary"), 0, 0, [
-    //       ["Total Value",     "=SUM(Holdings[Value])"],
-    //       ["Unrealized PnL",  "=SUM(Holdings[Unreal. PnL])"],
-    //       ["Cost Basis",      "=SUM(Holdings[Cost Basis])"],
-    //     ]),
-    //   ];
-    return [];
+    //   values: [valuesAt("Summary", [
+    //     ["Total Value",    "=SUM(Holdings[Value])"],
+    //     ["Unrealized PnL", "=SUM(Holdings[Unreal. PnL])"],
+    //     ["Cost Basis",     "=SUM(Holdings[Cost Basis])"],
+    //   ])],
+    return { structure: [], values: [] };
   },
 };

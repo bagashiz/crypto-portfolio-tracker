@@ -11,7 +11,7 @@
  * The desired structure lives in the per-tab modules; this runner resolves tab
  * titles -> sheet metadata (the only live read) and sends the combined requests.
  */
-import { gws, resolveSheetMeta, teardownRequests, type BuildContext, type SheetMeta, type TabModule } from "./lib.ts";
+import { gws, resolveSheetMeta, teardownRequests, writeValues, type BuildContext, type SheetMeta, type SheetRequest, type TabModule, type ValueRange } from "./lib.ts";
 import { summary } from "./summary.ts";
 import { holdings } from "./holdings.ts";
 import { transactions } from "./transactions.ts";
@@ -47,26 +47,47 @@ function metaOf(title: string): SheetMeta {
 }
 const ctx: BuildContext = { sheetId: (title) => metaOf(title).sheetId };
 
-const requests = selected.flatMap((m) => {
+const structure: SheetRequest[] = [];
+const valueRanges: ValueRange[] = [];
+for (const m of selected) {
   const teardown = reset ? teardownRequests(metaOf(m.title)) : [];
-  const built = m.build(ctx);
-  console.log(`${m.title}: ${built.length} request(s)${reset ? ` (+${teardown.length} reset)` : ""}`);
-  return [...teardown, ...built];
-});
+  const { structure: s, values: v } = m.build(ctx);
+  console.log(`${m.title}: ${s.length} structure + ${v.length} value-range(s)${reset ? ` (+${teardown.length} reset)` : ""}`);
+  structure.push(...teardown, ...s);
+  valueRanges.push(...v);
+}
 
-if (requests.length === 0) {
+if (structure.length === 0 && valueRanges.length === 0) {
   console.log("nothing to apply.");
   process.exit(0);
 }
 
-await gws([
-  "sheets",
-  "spreadsheets",
-  "batchUpdate",
-  "--params",
-  JSON.stringify({ spreadsheetId: ssid }),
-  "--json",
-  JSON.stringify({ requests }),
-  ...(dryRun ? ["--dry-run"] : []),
-]);
-console.log(dryRun ? "dry-run OK (nothing written)" : "applied.");
+// Two phases, because structured Table refs only bind once the Table exists:
+//   1. structure (teardown + addTable + conditional formats) via spreadsheets.batchUpdate
+//   2. cell content via the VALUES api (USER_ENTERED) — formulaValue/updateCells does NOT
+//      bind structured refs and yields #ERROR!
+if (structure.length > 0) {
+  await gws([
+    "sheets",
+    "spreadsheets",
+    "batchUpdate",
+    "--params",
+    JSON.stringify({ spreadsheetId: ssid }),
+    "--json",
+    JSON.stringify({ requests: structure }),
+    ...(dryRun ? ["--dry-run"] : []),
+  ]);
+  console.log(`  structure: ${structure.length} request(s) — ${dryRun ? "dry-run, nothing written" : "applied"}`);
+}
+
+// A freshly (re)created Table needs a moment to settle before its refs resolve.
+if (!dryRun && valueRanges.length > 0 && structure.some((r) => "addTable" in r)) {
+  const settleMs = Number(process.env.SHEET_TABLE_SETTLE_MS ?? 12000);
+  console.log(`  waiting ${settleMs}ms for new Table(s) to settle...`);
+  await Bun.sleep(settleMs);
+}
+
+await writeValues(ssid, valueRanges, dryRun);
+if (valueRanges.length > 0) {
+  console.log(`  values: ${valueRanges.length} range(s) — ${dryRun ? "dry-run, nothing written" : "applied"}`);
+}

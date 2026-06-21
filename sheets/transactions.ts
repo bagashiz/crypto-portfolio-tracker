@@ -1,10 +1,10 @@
 import {
-  setCells,
+  valuesAt,
   oneOfList,
   TABLE_BANDING,
   type BuildContext,
+  type BuildResult,
   type Primitive,
-  type SheetRequest,
   type TabModule,
 } from "./lib.ts";
 
@@ -40,7 +40,9 @@ const SEED: Txn[] = [
   { date: "=DATE(2026,6,21)", asset: "IVVon", side: "BUY", qty: 0.014921479, price: 761.42, fees: 0 },
 ];
 
-const F_AMOUNT = `=[@[Qty.]]*[@Price]`;
+// Bare `Table[Column]` resolves to the current row in a Table's calculated column;
+// the Excel-style `[@Column]` syntax is unsupported in Sheets.
+const F_AMOUNT = `=Transactions[Qty.]*Transactions[Price]`;
 
 function rowFor(t: Txn): Primitive[] {
   return [t.date, t.asset, t.side, t.qty, t.price, F_AMOUNT, t.fees];
@@ -58,22 +60,24 @@ const COLUMNS = [
 
 export const transactions: TabModule = {
   title: TITLE,
-  build(ctx: BuildContext): SheetRequest[] {
+  build(ctx: BuildContext): BuildResult {
     const sheetId = ctx.sheetId(TITLE);
     const rows = SEED.length + 1; // header + seed rows
-    const cells: Primitive[][] = [[...HEADERS], ...SEED.map(rowFor)];
-    return [
-      {
-        addTable: {
-          table: {
-            name: "Transactions",
-            range: { sheetId, startRowIndex: 0, endRowIndex: rows, startColumnIndex: 0, endColumnIndex: HEADERS.length },
-            columnProperties: COLUMNS,
-            rowsProperties: TABLE_BANDING,
+    const grid: Primitive[][] = [[...HEADERS], ...SEED.map(rowFor)];
+    return {
+      structure: [
+        {
+          addTable: {
+            table: {
+              name: "Transactions",
+              range: { sheetId, startRowIndex: 0, endRowIndex: rows, startColumnIndex: 0, endColumnIndex: HEADERS.length },
+              columnProperties: COLUMNS,
+              rowsProperties: TABLE_BANDING,
+            },
           },
         },
-      },
-      setCells(sheetId, 0, 0, cells),
-    ];
+      ],
+      values: [valuesAt(TITLE, grid)],
+    };
   },
 };

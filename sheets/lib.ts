@@ -17,41 +17,58 @@ export interface BuildContext {
   sheetId(title: string): number;
 }
 
+export type Primitive = string | number | boolean | null;
+
+/** A block of cell content (A1 range + 2D grid) written via the values API. */
+export interface ValueRange {
+  range: string;
+  values: Primitive[][];
+}
+
+export interface BuildResult {
+  /** Structural requests for spreadsheets.batchUpdate (addTable, conditional formats, ...). */
+  structure: SheetRequest[];
+  /** Cell content written via the values API with USER_ENTERED. */
+  values: ValueRange[];
+}
+
 export interface TabModule {
   /** The tab this module manages. */
   title: string;
-  /** Produce the requests that bring the tab to its desired state (return [] for a no-op). */
-  build(ctx: BuildContext): SheetRequest[];
-}
-
-export type Primitive = string | number | boolean | null;
-
-/** Wrap a primitive as a Sheets `CellData`. Strings starting with `=` become formulas; `null`/`""` clears the cell. */
-export function cellData(value: Primitive): Record<string, unknown> {
-  if (value === null || value === "") return {};
-  if (typeof value === "number") return { userEnteredValue: { numberValue: value } };
-  if (typeof value === "boolean") return { userEnteredValue: { boolValue: value } };
-  if (value.startsWith("=")) return { userEnteredValue: { formulaValue: value } };
-  return { userEnteredValue: { stringValue: value } };
+  /** Produce the tab's desired structure + cell content (empty arrays for a no-op). */
+  build(ctx: BuildContext): BuildResult;
 }
 
 /**
- * Write a 2D matrix of values/formulas starting at (startRow, startCol), both 0-indexed.
- * Only touches `userEnteredValue` — formatting and neighbouring cells are left untouched.
+ * A ValueRange anchored at A1 of `title`.
+ *
+ * Cell content MUST go through the values API (USER_ENTERED), not `updateCells`:
+ * structured Table refs (`Holdings[Value]`, `SUMIFS(Transactions[...])`) only bind when
+ * parsed via USER_ENTERED. The same formula set as `updateCells.formulaValue` stores but
+ * evaluates to #ERROR!. `null` cells are sent as "" (blank).
  */
-export function setCells(
-  sheetId: number,
-  startRow: number,
-  startCol: number,
-  rows: Primitive[][],
-): SheetRequest {
-  return {
-    updateCells: {
-      start: { sheetId, rowIndex: startRow, columnIndex: startCol },
-      rows: rows.map((row) => ({ values: row.map(cellData) })),
-      fields: "userEnteredValue",
-    },
-  };
+export function valuesAt(title: string, grid: Primitive[][]): ValueRange {
+  return { range: `${title}!A1`, values: grid };
+}
+
+/** Write cell content via the values API (USER_ENTERED); `null` clears the cell. */
+export async function writeValues(spreadsheetId: string, ranges: ValueRange[], dryRun: boolean): Promise<void> {
+  if (ranges.length === 0) return;
+  const data = ranges.map((r) => ({
+    range: r.range,
+    values: r.values.map((row) => row.map((cell) => (cell === null ? "" : cell))),
+  }));
+  await gws([
+    "sheets",
+    "spreadsheets",
+    "values",
+    "batchUpdate",
+    "--params",
+    JSON.stringify({ spreadsheetId }),
+    "--json",
+    JSON.stringify({ valueInputOption: "USER_ENTERED", data }),
+    ...(dryRun ? ["--dry-run"] : []),
+  ]);
 }
 
 /** Shared Table banding (olive header + zebra rows) used by the Holdings and Transactions tables. */
@@ -119,12 +136,16 @@ export async function resolveSheetMeta(spreadsheetId: string): Promise<Map<strin
 /**
  * Requests that strip a tab's existing Table(s) and conditional-format rules, so a
  * module's `addTable`/`addConditionalFormatRule` can re-run without erroring/duplicating.
- * CF rules are deleted high index -> 0 so indices stay valid as the list shrinks.
+ *
+ * CF rules go FIRST (high index -> 0, so indices stay valid as the list shrinks) and
+ * before the table: deleting a Table cascades to remove conditional formats inside its
+ * range, which would otherwise invalidate the later index-based CF deletes.
  */
 export function teardownRequests(meta: SheetMeta): SheetRequest[] {
-  const reqs: SheetRequest[] = meta.tableIds.map((tableId) => ({ deleteTable: { tableId } }));
+  const reqs: SheetRequest[] = [];
   for (let i = meta.conditionalFormatCount - 1; i >= 0; i--) {
     reqs.push({ deleteConditionalFormatRule: { sheetId: meta.sheetId, index: i } });
   }
+  for (const tableId of meta.tableIds) reqs.push({ deleteTable: { tableId } });
   return reqs;
 }

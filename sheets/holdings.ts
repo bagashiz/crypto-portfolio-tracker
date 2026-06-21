@@ -1,8 +1,9 @@
 import {
-  setCells,
+  valuesAt,
   oneOfList,
   TABLE_BANDING,
   type BuildContext,
+  type BuildResult,
   type Primitive,
   type SheetRequest,
   type TabModule,
@@ -60,34 +61,42 @@ const ASSETS: Asset[] = [
   { asset: "USDC", category: "Safe Haven", profile: "Low", link: "", network: "Hyperliquid & Solana", tickerOrMint: "USDC/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", target: 0.1, cash: true },
 ];
 
-// Calculated columns — identical per row, with current-row structured refs (`[@Col]`).
-const F_QTY = `=IF([@Network]="Hyperliquid & Solana", USDC_BALANCE(), IF([@Network]="Hyperliquid", HL_BALANCE([@[Ticker/Mint]]), IF([@Network]="Solana", JUP_BALANCE([@[Ticker/Mint]]), "")))`;
-const F_PRICE = `=IF([@Network]="Hyperliquid & Solana", 1, IF([@Network]="Hyperliquid", HL_PRICE([@[Ticker/Mint]]), IF([@Network]="Solana", JUP_PRICE([@[Ticker/Mint]]), "")))`;
-const F_VALUE = `=[@[Qty.]]*[@Price]`;
-const F_COST = `=SUMIFS(Transactions[Amount], Transactions[Asset], [@Asset], Transactions[Side], "BUY") + SUMIFS(Transactions[Fees], Transactions[Asset], [@Asset], Transactions[Side], "BUY") - SUMIFS(Transactions[Amount], Transactions[Asset], [@Asset], Transactions[Side], "SELL")`;
-const F_ACT = `=IF(SUM(Holdings[Value])=0, 0, ROUND([@Value]/SUM(Holdings[Value]), 4))`;
-const F_DEV = `=[@[Tgt. %]]-[@[Act. %]]`;
-const F_UPNL = `=[@Value]-[@[Cost Basis]]`;
+// Formulas, generated per row `r` (sheet row, 1-based). IMPORTANT: columns that feed a
+// scalar into a custom function (Qty/Price) or use a per-row SUMIFS criterion (Cost/Real)
+// must use A1 relative refs (E2, F2, A2): inside a Table's calculated column a structured
+// self-ref like `Holdings[Ticker/Mint]` does NOT resolve to a scalar and yields #ERROR!.
+// Plain column arithmetic (Act/Unreal.) keeps structured refs; cross-table SUMIFS ranges
+// stay structured (`Transactions[Amount]`). The A1 criterion also fixes the old A6 bug.
+const fQty = (r: number) =>
+  `=IF(E${r}="Hyperliquid & Solana", USDC_BALANCE(), IF(E${r}="Hyperliquid", HL_BALANCE(F${r}), IF(E${r}="Solana", JUP_BALANCE(F${r}), "")))`;
+const fPrice = (r: number) =>
+  `=IF(E${r}="Hyperliquid & Solana", 1, IF(E${r}="Hyperliquid", HL_PRICE(F${r}), IF(E${r}="Solana", JUP_PRICE(F${r}), "")))`;
+const fValue = (r: number) => `=G${r}*H${r}`;
+const fCost = (r: number) =>
+  `=SUMIFS(Transactions[Amount], Transactions[Asset], A${r}, Transactions[Side], "BUY") + SUMIFS(Transactions[Fees], Transactions[Asset], A${r}, Transactions[Side], "BUY") - SUMIFS(Transactions[Amount], Transactions[Asset], A${r}, Transactions[Side], "SELL")`;
+const F_ACT = `=IF(SUM(Holdings[Value])=0, 0, ROUND(Holdings[Value] / SUM(Holdings[Value]), 4))`;
+const fDev = (r: number) => `=K${r}-L${r}`;
+const F_UPNL = `=Holdings[Value]-Holdings[Cost Basis]`;
 // Realized PnL (weighted-average cost): sell proceeds (net of fees) minus the average
 // buy cost of the units sold. Zero until there are SELL rows for the asset.
-const F_REAL = `=LET(
-  sellProceeds, SUMIFS(Transactions[Amount], Transactions[Asset], [@Asset], Transactions[Side], "SELL"),
-  sellFees,     SUMIFS(Transactions[Fees],   Transactions[Asset], [@Asset], Transactions[Side], "SELL"),
-  sellQty,      SUMIFS(Transactions[Qty.],   Transactions[Asset], [@Asset], Transactions[Side], "SELL"),
-  buyAmount,    SUMIFS(Transactions[Amount], Transactions[Asset], [@Asset], Transactions[Side], "BUY"),
-  buyQty,       SUMIFS(Transactions[Qty.],   Transactions[Asset], [@Asset], Transactions[Side], "BUY"),
+const fReal = (r: number) => `=LET(
+  sellProceeds, SUMIFS(Transactions[Amount], Transactions[Asset], A${r}, Transactions[Side], "SELL"),
+  sellFees,     SUMIFS(Transactions[Fees],   Transactions[Asset], A${r}, Transactions[Side], "SELL"),
+  sellQty,      SUMIFS(Transactions[Qty.],   Transactions[Asset], A${r}, Transactions[Side], "SELL"),
+  buyAmount,    SUMIFS(Transactions[Amount], Transactions[Asset], A${r}, Transactions[Side], "BUY"),
+  buyQty,       SUMIFS(Transactions[Qty.],   Transactions[Asset], A${r}, Transactions[Side], "BUY"),
   IF(buyQty=0, 0, sellProceeds - sellFees - (buyAmount / buyQty) * sellQty)
 )`;
 
-function rowFor(a: Asset): Primitive[] {
+function rowFor(a: Asset, r: number): Primitive[] {
   return [
     a.asset, a.category, a.profile, a.link, a.network, a.tickerOrMint,
-    F_QTY, F_PRICE, F_VALUE,
-    a.cash ? null : F_COST,
+    fQty(r), fPrice(r), fValue(r),
+    a.cash ? null : fCost(r),
     a.target,
-    F_ACT, F_DEV,
+    F_ACT, fDev(r),
     a.cash ? null : F_UPNL,
-    a.cash ? null : F_REAL,
+    a.cash ? null : fReal(r),
   ];
 }
 
@@ -130,24 +139,26 @@ function pnlRule(sheetId: number, type: "NUMBER_GREATER" | "NUMBER_LESS", rgbCol
 
 export const holdings: TabModule = {
   title: TITLE,
-  build(ctx: BuildContext): SheetRequest[] {
+  build(ctx: BuildContext): BuildResult {
     const sheetId = ctx.sheetId(TITLE);
     const rows = ASSETS.length + 1; // header + assets
-    const cells: Primitive[][] = [[...HEADERS], ...ASSETS.map(rowFor)];
-    return [
-      {
-        addTable: {
-          table: {
-            name: "Holdings",
-            range: { sheetId, startRowIndex: 0, endRowIndex: rows, startColumnIndex: 0, endColumnIndex: HEADERS.length },
-            columnProperties: COLUMNS,
-            rowsProperties: TABLE_BANDING,
+    const grid: Primitive[][] = [[...HEADERS], ...ASSETS.map((a, i) => rowFor(a, i + 2))];
+    return {
+      structure: [
+        {
+          addTable: {
+            table: {
+              name: "Holdings",
+              range: { sheetId, startRowIndex: 0, endRowIndex: rows, startColumnIndex: 0, endColumnIndex: HEADERS.length },
+              columnProperties: COLUMNS,
+              rowsProperties: TABLE_BANDING,
+            },
           },
         },
-      },
-      setCells(sheetId, 0, 0, cells),
-      pnlRule(sheetId, "NUMBER_GREATER", PNL_GREEN),
-      pnlRule(sheetId, "NUMBER_LESS", PNL_RED),
-    ];
+        pnlRule(sheetId, "NUMBER_GREATER", PNL_GREEN),
+        pnlRule(sheetId, "NUMBER_LESS", PNL_RED),
+      ],
+      values: [valuesAt(TITLE, grid)],
+    };
   },
 };

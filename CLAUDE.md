@@ -25,7 +25,10 @@ Three tabs:
 
 Each tab's structure/formulas are reproduced in code under `sheets/` (`holdings.ts`, `transactions.ts`, `summary.ts`). The builders use structured refs throughout and fix a latent bug where BTC's Cost Basis referenced the wrong row (`A6`).
 
-**Formula convention:** prefer **structured Table references** (`Holdings[Value]`, `SUM(Holdings[Value])`) over A1/whole-column ranges (`I:I`, `I2:I9`). They're self-documenting and survive row/column moves. Use A1-style only where structured refs don't apply (e.g. cross-tab `SUMIFS(Transactions!F:F, …)`, or a single anchored cell).
+**Formula conventions (Google Sheets Tables — learned the hard way):**
+- Prefer **structured Table references** (`Holdings[Value]`, `SUMIFS(Transactions[Amount], …)`) over A1/whole-column ranges (`I:I`).
+- **No Excel `[@Column]` "this row" syntax** — it yields `#ERROR!`. Inside a Table, a bare `Holdings[Value]` already resolves to the current row (implicit intersection).
+- **Custom-function args and per-row SUMIFS criteria must use A1 relative refs** (`E2`, `F2`, `A2`), not structured refs: a structured self-ref fed to a custom function inside a calculated column doesn't resolve to a scalar and errors. Reserve structured refs for plain column arithmetic (`Act. %`, `Unreal. PnL`) and cross-table SUMIFS ranges. Using the A1 criterion also avoids the kind of latent bug the original had (BTC's Cost Basis pointed at `A6`).
 
 ## The Apps Script (`Code.gs`)
 
@@ -49,9 +52,15 @@ The dev loop: edit a tab's builder module → apply it → eyeball the live shee
 - **Code-managed** (structure, formulas, number formats, conditional formatting, the Tables, the asset list + `Tgt. %` targets — these are config) → defined in builder modules.
 - **Sheet-managed** (the live balances/prices the formulas fetch, and the **Transactions ledger rows**) → runtime/user data. Add transactions in the sheet, not in code; the ledger in `transactions.ts` is a point-in-time `SEED` snapshot for reproducibility, not the source of truth.
 
-**Layout:** `sheets/apply.ts` resolves tab titles → sheetIds and runs each module's `batchUpdate` requests (`bun run sheet:build [tab] [--dry-run]`); per-tab modules are `holdings.ts`, `transactions.ts`, `summary.ts`; `sheets/lib.ts` holds the request helpers (`setCells`, `oneOfList`, `TABLE_BANDING`, `gws`, `resolveSheetIds`).
+**Layout:** `sheets/apply.ts` resolves tab titles → sheetIds and runs each module (`bun run sheet:build [tab] [--reset] [--dry-run]`); per-tab modules are `holdings.ts`, `transactions.ts`, `summary.ts`; `sheets/lib.ts` holds helpers (`valuesAt`, `writeValues`, `oneOfList`, `TABLE_BANDING`, `teardownRequests`, `gws`, `resolveSheetMeta`). A module's `build()` returns `{ structure, values }`.
 
-**Re-running:** each module emits `addTable` + CF rules for a *fresh* build, so a plain re-run onto an already-built tab errors on `addTable` (the batch is atomic — nothing applies). Use **`--reset`** to make a full rebuild safely re-runnable: it tears down the tab's existing Table(s) and conditional-format rules (via `deleteTable` / `deleteConditionalFormatRule`) before re-adding, in the same atomic batch. For a content-only change (e.g. a formula tweak) just send the `setCells` portion — that's idempotent on its own. Always `--dry-run` first.
+**Apply is two-phase, and the ordering is load-bearing:**
+1. **structure** (teardown + `addTable` + conditional formats) via `spreadsheets.batchUpdate`.
+2. **values** (cell content) via the **values API with `USER_ENTERED`** — *not* `updateCells`/`formulaValue`, which stores formulas that fail to bind structured Table refs and render `#ERROR!`.
+
+Between the phases a freshly created Table needs ~10s+ to "settle" before its refs resolve, so `apply.ts` sleeps after an `addTable` (`SHEET_TABLE_SETTLE_MS`, default 12000).
+
+**Re-running:** modules emit `addTable` for a *fresh* build, so a plain re-run onto an already-built tab errors on `addTable` (atomic batch — nothing applies). Use **`--reset`** to tear down the tab's existing Table(s) + conditional-format rules first (CF before table — deleting a Table cascades to its in-range CF rules). For a content-only change (formula tweak) just write the values range. Always `--dry-run` first.
 
 ## Toolchain & commands
 
