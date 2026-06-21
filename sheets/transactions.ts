@@ -48,6 +48,9 @@ function rowFor(t: Txn): Primitive[] {
   return [t.date, t.asset, t.side, t.qty, t.price, F_AMOUNT, t.fees];
 }
 
+// NOTE: the Side BUY/SELL dropdown options are code-managed, but their chip COLORS are
+// not (no Sheets API field for it). They're set by hand in the UI and wiped by --reset, so
+// avoid rebuilding this tab if you want to keep them.
 const COLUMNS = [
   { columnIndex: 0, columnName: "Date", columnType: "DATE_TIME" },
   { columnIndex: 1, columnName: "Asset" },

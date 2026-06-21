@@ -62,6 +62,8 @@ Between the phases a freshly created Table needs ~10s+ to "settle" before its re
 
 **Re-running:** modules emit `addTable` for a *fresh* build, so a plain re-run onto an already-built tab errors on `addTable` (atomic batch — nothing applies). Use **`--reset`** to tear down the tab's existing Table(s) + conditional-format rules first (CF before table — deleting a Table cascades to its in-range CF rules). For a content-only change (formula tweak) just write the values range. Always `--dry-run` first.
 
+> **Dropdown chip colors are UI-only and NOT code-managed.** The Sheets API has no field for per-value dropdown colors (`DataValidationRule.condition.values` carry no color), so the builder only creates the dropdown *options* (Category, Profile, Side). The colored chips are set by hand in the UI and are **wiped whenever that tab is rebuilt with `--reset`** (the Table is deleted/recreated). Reapply them manually after a rebuild; avoid `--reset` on Transactions if you want to keep the `Side` chip colors.
+
 ## Toolchain & commands
 
 - **Runtime: Bun** (not Node), pinned with `gcloud` in `mise.toml` — `mise install` to provision. TypeScript runs through Bun (`noEmit`, bundler resolution, `.ts` extension imports); there is no build step and no `scripts` field in `package.json`.

@@ -100,6 +100,9 @@ function rowFor(a: Asset, r: number): Primitive[] {
   ];
 }
 
+// NOTE: dropdown *options* (Category, Profile) are code-managed here, but their CHIP
+// COLORS are not — the Sheets API has no field for per-value dropdown colors. Set them by
+// hand in the UI; they're wiped on every --reset rebuild of this tab.
 const COLUMNS = [
   { columnIndex: 0, columnName: "Asset" },
   { columnIndex: 1, columnName: "Category", columnType: "DROPDOWN", dataValidationRule: oneOfList(["Safe Haven", "RWA Yield", "Equity", "Crypto"]) },
