@@ -22,12 +22,17 @@ import {
  * are normal sheet formulas: structured refs like `SUM(Holdings[Value])` resolve fine
  * here (the A1-ref gotcha only bites inside a Table's calculated columns).
  *
- * Row positions are FIXED because the charts reference them by index — keep the grid and
- * the chart/format ranges in sync if you reflow the layout. Charts/formats live in
- * `structure` (batchUpdate); cell content in `values` (values API, USER_ENTERED).
+ * Styling (`styling()`) is also code-managed: hidden gridlines, a title banner, olive
+ * section/header bands (the brand color the other tabs use), zebra striping, borders,
+ * column widths, and green/red conditional formatting on the PnL figures.
  *
- * NOTE: re-running adds duplicate charts (addChart never errors, unlike addTable), so a
- * rebuild MUST use `--reset` (now tears down charts too, via lib's teardownRequests).
+ * Row positions are FIXED because the charts and style ranges reference them by index —
+ * keep the grid and the chart/format ranges in sync if you reflow the layout. Structure
+ * (styling + charts) goes via batchUpdate; cell content via the values API (USER_ENTERED).
+ *
+ * NOTE: re-running adds duplicate charts + conditional-format rules (addChart/addCF never
+ * error, unlike addTable), so a rebuild MUST use `--reset` (lib's teardownRequests tears
+ * down charts and CF rules first).
  */
 const TITLE = "Summary";
 
@@ -86,54 +91,138 @@ function grid(): Primitive[][] {
   ];
 }
 
-// ── Formatting helpers (repeatCell). Ranges are 0-based, end-exclusive. ──
-function numFmt(sheetId: number, r0: number, r1: number, c0: number, c1: number, type: string, pattern: string): SheetRequest {
-  return {
-    repeatCell: {
-      range: { sheetId, startRowIndex: r0, endRowIndex: r1, startColumnIndex: c0, endColumnIndex: c1 },
-      cell: { userEnteredFormat: { numberFormat: { type, pattern } } },
-      fields: "userEnteredFormat.numberFormat",
-    },
-  };
-}
-function bold(sheetId: number, r0: number, r1: number, c0: number, c1: number): SheetRequest {
-  return {
-    repeatCell: {
-      range: { sheetId, startRowIndex: r0, endRowIndex: r1, startColumnIndex: c0, endColumnIndex: c1 },
-      cell: { userEnteredFormat: { textFormat: { bold: true } } },
-      fields: "userEnteredFormat.textFormat.bold",
-    },
-  };
-}
+// ── Styling. All ranges are 0-based, end-exclusive. ──
+type Rgb = { red: number; green: number; blue: number };
+
+// Palette anchored on the olive brand color the Holdings/Transactions tables use.
+const BRAND: Rgb = { red: 0.20784314, green: 0.40784314, blue: 0.32941177 }; // headers / banner
+const BAND: Rgb = { red: 0.84, green: 0.9, blue: 0.86 }; // section divider band
+const ZEBRA: Rgb = { red: 0.94, green: 0.965, blue: 0.95 }; // alternating data row
+const TOTAL_BG: Rgb = { red: 0.88, green: 0.93, blue: 0.89 }; // category Total row
+const WHITE: Rgb = { red: 1, green: 1, blue: 1 };
+const BORDER: Rgb = { red: 0.78, green: 0.83, blue: 0.8 };
+const CF_GREEN: Rgb = { red: 0.8, green: 0.92, blue: 0.8 }; // PnL > 0
+const CF_RED: Rgb = { red: 0.97, green: 0.8, blue: 0.8 }; // PnL < 0
 
 const USD = `"$"#,##0.00`;
 const IDR = `"Rp"#,##0`;
 const PCT = `0.0%`;
 
-function formats(sheetId: number): SheetRequest[] {
+const rng = (sheetId: number, r0: number, r1: number, c0: number, c1: number) =>
+  ({ sheetId, startRowIndex: r0, endRowIndex: r1, startColumnIndex: c0, endColumnIndex: c1 });
+
+const fill = (sheetId: number, r0: number, r1: number, c0: number, c1: number, rgbColor: Rgb): SheetRequest => ({
+  repeatCell: { range: rng(sheetId, r0, r1, c0, c1), cell: { userEnteredFormat: { backgroundColorStyle: { rgbColor } } }, fields: "userEnteredFormat.backgroundColorStyle" },
+});
+// textFormat only (disjoint from background/align/numberFormat, so calls layer without clobbering).
+const text = (sheetId: number, r0: number, r1: number, c0: number, c1: number, opts: { bold?: boolean; fontSize?: number; color?: Rgb }): SheetRequest => {
+  const tf: Record<string, unknown> = {};
+  if (opts.bold !== undefined) tf.bold = opts.bold;
+  if (opts.fontSize !== undefined) tf.fontSize = opts.fontSize;
+  if (opts.color) tf.foregroundColorStyle = { rgbColor: opts.color };
+  return { repeatCell: { range: rng(sheetId, r0, r1, c0, c1), cell: { userEnteredFormat: { textFormat: tf } }, fields: "userEnteredFormat.textFormat" } };
+};
+const align = (sheetId: number, r0: number, r1: number, c0: number, c1: number, opts: { h?: string; v?: string }): SheetRequest => {
+  const fmt: Record<string, unknown> = {};
+  const fields: string[] = [];
+  if (opts.h) { fmt.horizontalAlignment = opts.h; fields.push("userEnteredFormat.horizontalAlignment"); }
+  if (opts.v) { fmt.verticalAlignment = opts.v; fields.push("userEnteredFormat.verticalAlignment"); }
+  return { repeatCell: { range: rng(sheetId, r0, r1, c0, c1), cell: { userEnteredFormat: fmt }, fields: fields.join(",") } };
+};
+const numFmt = (sheetId: number, r0: number, r1: number, c0: number, c1: number, type: string, pattern: string): SheetRequest => ({
+  repeatCell: { range: rng(sheetId, r0, r1, c0, c1), cell: { userEnteredFormat: { numberFormat: { type, pattern } } }, fields: "userEnteredFormat.numberFormat" },
+});
+const merge = (sheetId: number, r0: number, r1: number, c0: number, c1: number): SheetRequest => ({
+  mergeCells: { mergeType: "MERGE_ALL", range: rng(sheetId, r0, r1, c0, c1) },
+});
+const colWidth = (sheetId: number, c0: number, c1: number, px: number): SheetRequest => ({
+  updateDimensionProperties: { range: { sheetId, dimension: "COLUMNS", startIndex: c0, endIndex: c1 }, properties: { pixelSize: px }, fields: "pixelSize" },
+});
+const rowHeight = (sheetId: number, r0: number, r1: number, px: number): SheetRequest => ({
+  updateDimensionProperties: { range: { sheetId, dimension: "ROWS", startIndex: r0, endIndex: r1 }, properties: { pixelSize: px }, fields: "pixelSize" },
+});
+const allBorders = (sheetId: number, r0: number, r1: number, c0: number, c1: number): SheetRequest => {
+  const line = { style: "SOLID", colorStyle: { rgbColor: BORDER } };
+  return { updateBorders: { range: rng(sheetId, r0, r1, c0, c1), top: line, bottom: line, left: line, right: line, innerHorizontal: line, innerVertical: line } };
+};
+const cfRule = (sheetId: number, r0: number, r1: number, c0: number, c1: number, type: string, rgbColor: Rgb): SheetRequest => ({
+  addConditionalFormatRule: { index: 0, rule: { ranges: [rng(sheetId, r0, r1, c0, c1)], booleanRule: { condition: { type, values: [{ userEnteredValue: "0" }] }, format: { backgroundColorStyle: { rgbColor } } } } },
+});
+
+// A section divider band (row r, 0-based) spanning its block's width (cols 0..c1).
+const section = (sheetId: number, r: number, c1: number): SheetRequest[] => [
+  merge(sheetId, r, r + 1, 0, c1),
+  fill(sheetId, r, r + 1, 0, c1, BAND),
+  text(sheetId, r, r + 1, 0, c1, { bold: true, fontSize: 11, color: BRAND }),
+  align(sheetId, r, r + 1, 0, c1, { v: "MIDDLE" }),
+];
+// A table header row (row r, 0-based): olive fill, white bold; numeric cols (1..c1) right-aligned.
+const header = (sheetId: number, r: number, c1: number): SheetRequest[] => [
+  fill(sheetId, r, r + 1, 0, c1, BRAND),
+  text(sheetId, r, r + 1, 0, c1, { bold: true, fontSize: 10, color: WHITE }),
+  align(sheetId, r, r + 1, 0, c1, { v: "MIDDLE" }),
+  align(sheetId, r, r + 1, 1, c1, { h: "RIGHT" }),
+];
+
+function styling(sheetId: number): SheetRequest[] {
   return [
-    // Bold: title, section headers, table header rows, the category Total row.
-    bold(sheetId, 0, 1, 0, 1),
-    bold(sheetId, 3, 4, 0, 1),
-    bold(sheetId, 12, 13, 0, 1),
-    bold(sheetId, 20, 21, 0, 1),
-    bold(sheetId, 4, 5, 0, 3), // row 5 KPI header
-    bold(sheetId, 13, 14, 0, 6), // row 14 category header
-    bold(sheetId, 18, 19, 0, 6), // row 19 Total
-    bold(sheetId, 21, 22, 0, 3), // row 22 risk header
-    // Rate (B2) as a plain grouped number.
-    numFmt(sheetId, 1, 2, 1, 2, "NUMBER", `#,##0`),
-    // KPI block: USD (B6:B10), IDR (C6:C10), Return % (B11).
-    numFmt(sheetId, 5, 10, 1, 2, "CURRENCY", USD),
-    numFmt(sheetId, 5, 10, 2, 3, "CURRENCY", IDR),
-    numFmt(sheetId, 10, 11, 1, 2, "PERCENT", PCT),
-    // Category block (rows 15..19): Value + Rebalance $ as USD, Tgt/Act/Dev as %.
-    numFmt(sheetId, 14, 19, 1, 2, "CURRENCY", USD),
-    numFmt(sheetId, 14, 19, 2, 5, "PERCENT", PCT),
-    numFmt(sheetId, 14, 19, 5, 6, "CURRENCY", USD),
-    // Risk block (rows 23..27): Value as USD, Act as %.
-    numFmt(sheetId, 22, 27, 1, 2, "CURRENCY", USD),
-    numFmt(sheetId, 22, 27, 2, 3, "PERCENT", PCT),
+    // Canvas: drop gridlines, widen the label column, give room for IDR figures.
+    { updateSheetProperties: { properties: { sheetId, gridProperties: { hideGridlines: true } }, fields: "gridProperties.hideGridlines" } },
+    colWidth(sheetId, 0, 1, 165),
+    colWidth(sheetId, 1, 6, 115),
+    rowHeight(sheetId, 0, 1, 40), // title
+    rowHeight(sheetId, 3, 4, 26),
+    rowHeight(sheetId, 12, 13, 26),
+    rowHeight(sheetId, 20, 21, 26),
+
+    // Title banner (A1:F1).
+    merge(sheetId, 0, 1, 0, 6),
+    fill(sheetId, 0, 1, 0, 6, BRAND),
+    text(sheetId, 0, 1, 0, 6, { bold: true, fontSize: 15, color: WHITE }),
+    align(sheetId, 0, 1, 0, 6, { v: "MIDDLE" }),
+
+    // Section dividers (KPI/risk are 3 wide, category is 6).
+    ...section(sheetId, 3, 3),
+    ...section(sheetId, 12, 6),
+    ...section(sheetId, 20, 3),
+
+    // Table header rows.
+    ...header(sheetId, 4, 3),
+    ...header(sheetId, 13, 6),
+    ...header(sheetId, 21, 3),
+
+    // Zebra striping on the data rows.
+    fill(sheetId, 6, 7, 0, 3, ZEBRA),
+    fill(sheetId, 8, 9, 0, 3, ZEBRA),
+    fill(sheetId, 10, 11, 0, 3, ZEBRA),
+    fill(sheetId, 15, 16, 0, 6, ZEBRA),
+    fill(sheetId, 17, 18, 0, 6, ZEBRA),
+    fill(sheetId, 23, 24, 0, 3, ZEBRA),
+    fill(sheetId, 25, 26, 0, 3, ZEBRA),
+
+    // Category Total row (row 19): emphasized fill + bold.
+    fill(sheetId, 18, 19, 0, 6, TOTAL_BG),
+    text(sheetId, 18, 19, 0, 6, { bold: true }),
+
+    // Block borders for definition.
+    allBorders(sheetId, 4, 11, 0, 3),
+    allBorders(sheetId, 13, 19, 0, 6),
+    allBorders(sheetId, 21, 27, 0, 3),
+
+    // Number formats.
+    numFmt(sheetId, 1, 2, 1, 2, "NUMBER", `#,##0`), // rate
+    numFmt(sheetId, 5, 10, 1, 2, "CURRENCY", USD), // KPI USD
+    numFmt(sheetId, 5, 10, 2, 3, "CURRENCY", IDR), // KPI IDR
+    numFmt(sheetId, 10, 11, 1, 2, "PERCENT", PCT), // Return %
+    numFmt(sheetId, 14, 19, 1, 2, "CURRENCY", USD), // category Value
+    numFmt(sheetId, 14, 19, 2, 5, "PERCENT", PCT), // Tgt/Act/Dev
+    numFmt(sheetId, 14, 19, 5, 6, "CURRENCY", USD), // Rebalance $
+    numFmt(sheetId, 22, 27, 1, 2, "CURRENCY", USD), // risk Value
+    numFmt(sheetId, 22, 27, 2, 3, "PERCENT", PCT), // risk Act %
+
+    // Green/red on the PnL figures (rows 8..11, USD + IDR). CF overrides the zebra fill.
+    cfRule(sheetId, 7, 11, 1, 3, "NUMBER_GREATER", CF_GREEN),
+    cfRule(sheetId, 7, 11, 1, 3, "NUMBER_LESS", CF_RED),
   ];
 }
 
@@ -198,7 +287,7 @@ export const summary: TabModule = {
     const sheetId = ctx.sheetId(TITLE);
     return {
       structure: [
-        ...formats(sheetId),
+        ...styling(sheetId),
         pie(sheetId, "Allocation by Category", CAT_FIRST, CATEGORIES.length, 3),
         tgtVsAct(sheetId, 19),
         pie(sheetId, "Allocation by Risk", RISK_FIRST, RISKS.length, 35),
