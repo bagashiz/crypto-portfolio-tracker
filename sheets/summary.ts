@@ -64,13 +64,22 @@ const CAT_FIRST = 15; // Safe Haven … Crypto on 15..18, Total on 19
 const CAT_TOTAL = CAT_FIRST + CATEGORIES.length; // 19
 const RISK_FIRST = 23; // Low … High on 23..27
 
+// Risk Profile (row 3): target-weighted risk score on a 1–10 scale, normalized by Σ targets,
+// plus a label for the nearest tier. Uses each asset's hand-set Tgt. % as the weight — so
+// it's the *intended* risk posture, not current. The five tiers map to 2/4/6/8/10 (even
+// steps of 2, High = 10); the label divides by that step to recover the tier index.
+const RISK_LEVELS = [2, 4, 6, 8, 10]; // parallel to RISKS (Low … High)
+const RISK_STEP = 2;
+const RISK_SCORE = `=(${RISKS.map((rk, i) => `SUMIF(Holdings[Risk], "${rk}", Holdings[Tgt. %])*${RISK_LEVELS[i]}`).join(" + ")}) / SUM(Holdings[Tgt. %])`;
+const RISK_LABEL = `=CHOOSE(ROUND(B3 / ${RISK_STEP}, 0), ${RISKS.map((rk) => `"${rk}"`).join(", ")})`;
+
 function grid(): Primitive[][] {
   const cat = CATEGORIES.map((c, i) => catRow(c, CAT_FIRST + i));
   const risk = RISKS.map((rk, i) => riskRow(rk, RISK_FIRST + i));
   return [
     ["Portfolio Summary"], // 1
     ["USD → IDR rate", `=GOOGLEFINANCE("CURRENCY:USDIDR")`], // 2
-    [""], // 3
+    ["Risk Profile", RISK_SCORE, RISK_LABEL], // 3 (score in B3, tier label in C3)
     ["Headline KPIs"], // 4
     ["Metric", "USD", "IDR"], // 5
     ["Total Value", "=SUM(Holdings[Value])", `=B6*${RATE}`], // 6
@@ -211,6 +220,8 @@ function styling(sheetId: number): SheetRequest[] {
 
     // Number formats.
     numFmt(sheetId, 1, 2, 1, 2, "NUMBER", `#,##0`), // rate
+    numFmt(sheetId, 2, 3, 1, 2, "NUMBER", `0.0" / 10"`), // risk score (B3), 1–10 scale
+    text(sheetId, 2, 3, 2, 3, { bold: true, color: BRAND }), // risk tier label (C3)
     numFmt(sheetId, 5, 10, 1, 2, "CURRENCY", USD), // KPI USD
     numFmt(sheetId, 5, 10, 2, 3, "CURRENCY", IDR), // KPI IDR
     numFmt(sheetId, 10, 11, 1, 2, "PERCENT", PCT), // Return %
