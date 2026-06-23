@@ -370,3 +370,90 @@ function JUP_BALANCES(range) {
 function USDC_BALANCE() {
   return HL_BALANCE("USDC") + JUP_BALANCE(SOL_USDC_MINT);
 }
+
+/* -------------------------------------------------------------------------- */
+/* Historical snapshots                                                        */
+/* -------------------------------------------------------------------------- */
+
+const HOLDINGS_SHEET = "Holdings";
+const HISTORY_SHEET = "History";
+
+/**
+ * Fresh USD value for one Holdings row, routed by its Network column. Mirrors the
+ * Holdings Qty×Price logic but computes live (the cells use custom functions, which can
+ * go stale if the sheet isn't open — so a trigger must not just read them).
+ */
+function valueForHoldingsRow(network, id) {
+  switch (network) {
+    case "Hyperliquid & Solana": return USDC_BALANCE(); // price = 1
+    case "Hyperliquid": return HL_BALANCE(id) * HL_PRICE(id);
+    case "Solana": return JUP_BALANCE(id) * JUP_PRICE(id);
+    default: return 0;
+  }
+}
+
+/**
+ * Compute portfolio totals. Total Value is fetched FRESH (price/balance are custom
+ * functions); Cost Basis and Realized PnL are read from the Holdings columns because those
+ * are native SUMIFS formulas over Transactions and always recalc reliably.
+ *
+ * Holdings columns (1-based): E=5 Network, F=6 Ticker/Mint, J=10 Cost Basis, O=15 Real. PnL.
+ */
+function computePortfolioTotals() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(HOLDINGS_SHEET);
+  if (!sheet) throw new Error(`Sheet not found: ${HOLDINGS_SHEET}`);
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) throw new Error("Holdings has no data rows");
+
+  const rows = sheet.getRange(2, 1, lastRow - 1, 15).getValues();
+
+  let totalValue = 0;
+  let costBasis = 0;
+  let realizedPnl = 0;
+
+  for (const row of rows) {
+    if (!row[0]) continue; // no Asset name => not a data row
+    const network = String(row[4]);
+    const id = String(row[5]);
+    totalValue += valueForHoldingsRow(network, id);
+    costBasis += Number(row[9]) || 0;
+    realizedPnl += Number(row[14]) || 0;
+  }
+
+  const unrealizedPnl = totalValue - costBasis;
+  const totalPnl = unrealizedPnl + realizedPnl;
+
+  return { totalValue, costBasis, unrealizedPnl, realizedPnl, totalPnl };
+}
+
+/**
+ * Append one snapshot row to History. Run by the daily time-driven trigger
+ * (see setupDailySnapshotTrigger); also safe to run by hand for an on-demand point.
+ */
+function snapshotPortfolio() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const history = ss.getSheetByName(HISTORY_SHEET);
+  if (!history) throw new Error(`Sheet not found: ${HISTORY_SHEET} — build it first (sheet:build history)`);
+
+  const t = computePortfolioTotals();
+  history.appendRow([new Date(), t.totalValue, t.costBasis, t.unrealizedPnl, t.realizedPnl, t.totalPnl]);
+}
+
+/**
+ * One-time setup: install the daily trigger for snapshotPortfolio. Triggers can't be
+ * created by pushing code, so RUN THIS ONCE from the Apps Script editor (it will prompt for
+ * authorization). Re-running replaces the existing snapshot trigger rather than duplicating.
+ * Fires daily around 23:00 in the project timezone (Asia/Jakarta).
+ */
+function setupDailySnapshotTrigger() {
+  ScriptApp.getProjectTriggers()
+    .filter(t => t.getHandlerFunction() === "snapshotPortfolio")
+    .forEach(t => ScriptApp.deleteTrigger(t));
+
+  ScriptApp.newTrigger("snapshotPortfolio")
+    .timeBased()
+    .everyDays(1)
+    .atHour(23)
+    .create();
+}

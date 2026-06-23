@@ -11,12 +11,13 @@
  * The desired structure lives in the per-tab modules; this runner resolves tab
  * titles -> sheet metadata (the only live read) and sends the combined requests.
  */
-import { gws, resolveSheetMeta, teardownRequests, writeValues, type BuildContext, type SheetMeta, type SheetRequest, type TabModule, type ValueRange } from "./lib.ts";
+import { gws, resolveSheetMeta, teardownRequests, writeValues, type BuildContext, type SheetRequest, type TabModule, type ValueRange } from "./lib.ts";
 import { summary } from "./summary.ts";
 import { holdings } from "./holdings.ts";
 import { transactions } from "./transactions.ts";
+import { history } from "./history.ts";
 
-const MODULES: TabModule[] = [summary, holdings, transactions];
+const MODULES: TabModule[] = [summary, holdings, transactions, history];
 
 function spreadsheetId(): string {
   const id = process.env.GOOGLE_SPREADSHEET_ID;
@@ -40,17 +41,37 @@ if (selected.length === 0) {
 
 const ssid = spreadsheetId();
 const meta = await resolveSheetMeta(ssid);
-function metaOf(title: string): SheetMeta {
-  const m = meta.get(title);
-  if (!m) throw new Error(`Tab "${title}" not found in spreadsheet`);
-  return m;
-}
-const ctx: BuildContext = { sheetId: (title) => metaOf(title).sheetId };
 
-const structure: SheetRequest[] = [];
+// Resolve each selected tab to a sheetId. A tab that doesn't exist yet but declares
+// `ensureSheetId` is created via an `addSheet` (with that fixed id) prepended to the batch,
+// so the module's own structure can reference the id in the same request.
+const resolved = new Map<string, number>();
+const createSheets: SheetRequest[] = [];
+for (const m of selected) {
+  const existing = meta.get(m.title);
+  if (existing) {
+    resolved.set(m.title, existing.sheetId);
+  } else if (m.ensureSheetId != null) {
+    resolved.set(m.title, m.ensureSheetId);
+    createSheets.push({ addSheet: { properties: { sheetId: m.ensureSheetId, title: m.title } } });
+    console.log(`${m.title}: not found — will create (sheetId ${m.ensureSheetId})`);
+  } else {
+    throw new Error(`Tab "${m.title}" not found in spreadsheet and module has no ensureSheetId`);
+  }
+}
+const ctx: BuildContext = {
+  sheetId: (title) => {
+    const id = resolved.get(title);
+    if (id == null) throw new Error(`Tab "${title}" not resolved`);
+    return id;
+  },
+};
+
+const structure: SheetRequest[] = [...createSheets];
 const valueRanges: ValueRange[] = [];
 for (const m of selected) {
-  const teardown = reset ? teardownRequests(metaOf(m.title)) : [];
+  const existing = meta.get(m.title);
+  const teardown = reset && existing ? teardownRequests(existing) : [];
   const { structure: s, values: v } = m.build(ctx);
   console.log(`${m.title}: ${s.length} structure + ${v.length} value-range(s)${reset ? ` (+${teardown.length} reset)` : ""}`);
   structure.push(...teardown, ...s);

@@ -35,6 +35,12 @@ export interface BuildResult {
 export interface TabModule {
   /** The tab this module manages. */
   title: string;
+  /**
+   * Fixed sheetId to use if the tab does not exist yet — the runner emits an `addSheet`
+   * with this id so the module's structure (charts/formats) can reference it in the same
+   * batch. Omit for tabs that are expected to already exist.
+   */
+  ensureSheetId?: number;
   /** Produce the tab's desired structure + cell content (empty arrays for a no-op). */
   build(ctx: BuildContext): BuildResult;
 }
