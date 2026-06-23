@@ -101,6 +101,8 @@ export interface SheetMeta {
   tableIds: string[];
   /** Count of conditional-format rules on the tab (for teardown on --reset). */
   conditionalFormatCount: number;
+  /** Ids of embedded charts on the tab (for teardown on --reset). */
+  chartIds: number[];
 }
 
 /** Read each tab's id, tables, and conditional-format count (the one live read the builder needs, at apply-time). */
@@ -110,7 +112,7 @@ export async function resolveSheetMeta(spreadsheetId: string): Promise<Map<strin
     "spreadsheets",
     "get",
     "--params",
-    JSON.stringify({ spreadsheetId, fields: "sheets(properties(sheetId,title),tables(tableId),conditionalFormats)" }),
+    JSON.stringify({ spreadsheetId, fields: "sheets(properties(sheetId,title),tables(tableId),conditionalFormats,charts(chartId))" }),
     "--format",
     "json",
   ]);
@@ -119,6 +121,7 @@ export async function resolveSheetMeta(spreadsheetId: string): Promise<Map<strin
       properties: { sheetId: number; title: string };
       tables?: { tableId: string }[];
       conditionalFormats?: unknown[];
+      charts?: { chartId: number }[];
     }[];
   };
   return new Map(
@@ -128,6 +131,7 @@ export async function resolveSheetMeta(spreadsheetId: string): Promise<Map<strin
         sheetId: s.properties.sheetId,
         tableIds: (s.tables ?? []).map((t) => t.tableId),
         conditionalFormatCount: (s.conditionalFormats ?? []).length,
+        chartIds: (s.charts ?? []).map((c) => c.chartId),
       },
     ]),
   );
@@ -147,5 +151,6 @@ export function teardownRequests(meta: SheetMeta): SheetRequest[] {
     reqs.push({ deleteConditionalFormatRule: { sheetId: meta.sheetId, index: i } });
   }
   for (const tableId of meta.tableIds) reqs.push({ deleteTable: { tableId } });
+  for (const chartId of meta.chartIds) reqs.push({ deleteEmbeddedObject: { objectId: chartId } });
   return reqs;
 }
