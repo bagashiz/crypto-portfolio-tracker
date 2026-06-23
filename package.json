@@ -1,13 +1,15 @@
 {
   "name": "crypto-portfolio-tracker",
+  "module": "index.ts",
   "type": "module",
   "private": true,
-  "workspaces": ["layout-builder", "apps-script"],
   "scripts": {
-    "deploy": "bun run --filter apps-script deploy",
-    "build:apps-script": "bun run --filter apps-script build"
+    "as:pull": "bun run apps-script/sync.ts pull",
+    "as:push": "bun run apps-script/sync.ts push",
+    "sheet:build": "bun run sheets/apply.ts"
   },
   "devDependencies": {
+    "@googleworkspace/cli": "^0.22.5",
     "@types/bun": "latest"
   },
   "peerDependencies": {

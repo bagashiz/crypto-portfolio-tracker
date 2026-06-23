@@ -1,518 +1,107 @@
-# Bun
+# CLAUDE.md
 
-Default to using Bun instead of Node.js.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-- Use `bun <file>` instead of `node <file>` or `ts-node <file>`
-- Use `bun test` instead of `jest` or `vitest`
-- Use `bun build <file.html|file.ts|file.css>` instead of `webpack` or `esbuild`
-- Use `bun install` instead of `npm install` or `yarn install` or `pnpm install`
-- Use `bun run <script>` instead of `npm run <script>` or `yarn run <script>` or `pnpm run <script>`
-- Use `bunx <package> <command>` instead of `npx <package> <command>`
-- Bun automatically loads .env, so don't use dotenv.
+## What this is
 
-## APIs
+A personal Google Sheets portfolio tracker. **The system lives in two remote Google resources, not in this repo** — the local tree is just a Bun/TypeScript scaffold plus the `gws` CLI used to read and edit those resources. The IDs are in `.env` (see `.env.example`):
 
-- `Bun.serve()` supports WebSockets, HTTPS, and routes. Don't use `express`.
-- `bun:sqlite` for SQLite. Don't use `better-sqlite3`.
-- `Bun.redis` for Redis. Don't use `ioredis`.
-- `Bun.sql` for Postgres. Don't use `pg` or `postgres.js`.
-- `WebSocket` is built-in. Don't use `ws`.
-- Prefer `Bun.file` over `node:fs`'s readFile/writeFile
-- Bun.$`ls` instead of execa.
+- `GOOGLE_SPREADSHEET_ID` → spreadsheet **"Global Crypto & RWA Portfolio"**
+- `GOOGLE_APP_SCRIPT_ID` → its **container-bound Apps Script** project (single file `Code.gs`, V8 runtime, `Asia/Jakarta`)
 
-## Testing
+There is no local copy of the spreadsheet or the script; pull them with `gws` when you need current state.
 
-Use `bun test` to run tests.
+## The spreadsheet
 
-```ts#index.test.ts
-import { test, expect } from "bun:test";
+Four tabs:
+- **Holdings** — the core table (a formatted Table, so formulas use structured refs like `Holdings[Value]`). One row per asset. Live cells are computed by the Apps Script custom functions, routed by the **Network** column:
+  - `Qty.` → `HL_BALANCE(ticker)` / `JUP_BALANCE(mint)` / `USDC_BALANCE()` (Hyperliquid + Solana combined)
+  - `Price` → `HL_PRICE(ticker)` / `JUP_PRICE(mint)` / `1` for the USDC row
+  - `Value = Qty × Price`; `Cost Basis` via `SUMIFS` over Transactions (Buys + fees − Sells); `Tgt. %` is a hand-set target; `Act. %` = Value ÷ Σ Value; `Dev. % = Tgt − Act`; `Unreal. PnL = Value − Cost Basis`; `Real. PnL` = weighted-average realized P/L (sell proceeds − fees − avg buy cost × qty sold).
+  - The **Ticker/Mint** column is the lookup identifier passed as the function argument, and it is *not* the display symbol: Hyperliquid rows use the **Hyperliquid spot ticker** (BTC→`UBTC`, XAUt→`XAUT0`, HYPE→`HYPE`), Solana rows use the **SPL token mint address**.
+  - Two **conditional-format** rules colour the PnL columns (N:O): green when `> 0`, red when `< 0`.
+- **Transactions** — the buy/sell ledger (`Date, Asset, Side, Qty., Price, Amount, Fees`; `Amount = Qty × Price`) that feeds cost basis and realized PnL. `Asset` joins to the Holdings name; `Side` is a `BUY`/`SELL` dropdown.
+- **Summary** — the dashboard (`summary.ts`): a USD→IDR rate (via `GOOGLEFINANCE("CURRENCY:USDIDR")`) and a **Risk Profile** at `D2:F2` (target-weighted risk score on a 1–10 scale — tiers map to 2/4/6/8/10 — plus a tier label whose chip is color-coded green→red by conditional formatting), headline KPIs in USD + IDR, allocation-by-Category (with $-to-rebalance), risk breakdown, and three charts. All pure `Holdings[…]`/`Transactions[…]` rollups — no Apps Script needed. Styling (banner, olive bands, zebra, borders, hidden gridlines, PnL + risk-tier conditional colors) is code-managed too.
+- **History** — the time series behind the historical charts (`Date, Total Value, Cost Basis, Unreal. PnL, Real. PnL, Total PnL`). **Append-only runtime data**: the Apps Script `snapshotPortfolio()` adds one row/day via a daily trigger. Only the header + structure + two line charts (Value-over-time, PnL-over-time) are code-managed (`history.ts`); the rows are sheet-managed. Deliberately **not** a Table (so `appendRow` stays simple and the whole-column charts grow automatically). No backfill — the series starts when snapshotting begins.
 
-test("hello world", () => {
-  expect(1).toBe(1);
-});
-```
+Each tab's structure/formulas are reproduced in code under `sheets/` (`holdings.ts`, `transactions.ts`, `summary.ts`, `history.ts`). The builders use structured refs throughout and fix a latent bug where BTC's Cost Basis referenced the wrong row (`A6`).
 
-## Frontend
+**Formula conventions (Google Sheets Tables — learned the hard way):**
+- Prefer **structured Table references** (`Holdings[Value]`, `SUMIFS(Transactions[Amount], …)`) over A1/whole-column ranges (`I:I`).
+- **No Excel `[@Column]` "this row" syntax** — it yields `#ERROR!`. Inside a Table, a bare `Holdings[Value]` already resolves to the current row (implicit intersection).
+- **Custom-function args and per-row SUMIFS criteria must use A1 relative refs** (`E2`, `F2`, `A2`), not structured refs: a structured self-ref fed to a custom function inside a calculated column doesn't resolve to a scalar and errors. Reserve structured refs for plain column arithmetic (`Act. %`, `Unreal. PnL`) and cross-table SUMIFS ranges. Using the A1 criterion also avoids the kind of latent bug the original had (BTC's Cost Basis pointed at `A6`).
 
-Use HTML imports with `Bun.serve()`. Don't use `vite`. HTML imports fully support React, CSS, Tailwind.
+## The Apps Script (`Code.gs`)
 
-Server:
+Exposes **custom spreadsheet functions** the Holdings cells call directly (`=HL_PRICE`, `=HL_PRICES`, `=HL_BALANCE`, `=JUP_PRICE`, `=JUP_PRICES`, `=JUP_BALANCE`, `=USDC_BALANCE`, plus batch `*S` variants). The Holdings live cells refresh when the sheet recalculates (no trigger drives them).
 
-```ts#index.ts
-import index from "./index.html"
+**One scheduled trigger** drives historical snapshots: `snapshotPortfolio()` computes portfolio totals and appends a row to the **History** tab. It fetches **Total Value fresh** (price/balance are custom functions, which go stale when the sheet isn't open — a trigger must not just read those cells) but reads **Cost Basis / Real. PnL** from the Holdings columns (native `SUMIFS`, always fresh). The trigger is **not** created by pushing code — run `setupDailySnapshotTrigger()` **once** from the Apps Script editor to install it (daily ~23:00 Asia/Jakarta); re-running it replaces rather than duplicates.
 
-Bun.serve({
-  routes: {
-    "/": index,
-    "/api/users/:id": {
-      GET: (req) => {
-        return new Response(JSON.stringify({ id: req.params.id }));
-      },
-    },
-  },
-  // optional websocket support
-  websocket: {
-    open: (ws) => {
-      ws.send("Hello, world!");
-    },
-    message: (ws, message) => {
-      ws.send(message);
-    },
-    close: (ws) => {
-      // handle close
-    }
-  },
-  development: {
-    hmr: true,
-    console: true,
-  }
-})
-```
+Data sources, all raw `UrlFetchApp`, read-only, public addresses only:
+- **Hyperliquid** `POST /info` — `spotMetaAndAssetCtxs` (prices, mapped token→`midPx`), `spotClearinghouseState` (balances).
+- **Jupiter** — `price/v3` (prices) and `ultra/v1/balances` (balances), both requiring `x-api-key`.
 
-HTML files can import .tsx, .jsx or .js files directly and Bun's bundler will transpile & bundle automatically. `<link>` tags can point to stylesheets and Bun's CSS bundler will bundle.
+Caching is layered in `withCachedFetch`: `CacheService` (TTL = `CACHE_TTL_SECONDS`, default 300s) for the hot path, a `STALE_<key>` copy in Script Properties as a fallback when a fetch fails, and `LockService` to prevent cache-stampede on concurrent recalcs.
 
-```html#index.html
-<html>
-  <body>
-    <h1>Hello, world!</h1>
-    <script type="module" src="./frontend.tsx"></script>
-  </body>
-</html>
-```
+**Secrets live in Script Properties, never in code:** `HL_WALLET_ADDRESS`, `SOL_WALLET_ADDRESS`, `JUP_API_KEY`, and optional `CACHE_TTL_SECONDS`. When editing the script, preserve these reads.
 
-With the following `frontend.tsx`:
+## Developing the spreadsheet
 
-```tsx#frontend.tsx
-import React from "react";
-import { createRoot } from "react-dom/client";
+The point of this rewrite is to **expand the sheet's features** (Summary dashboard and History/snapshots are done), not just mirror it. The intended model is a **builder**, not ad-hoc live edits or re-querying state on every change: the sheet's *desired structure* lives as code in the repo and gets applied via `spreadsheets.batchUpdate`.
 
-// import .css files directly and it works
-import './index.css';
+The dev loop: edit a tab's builder module → apply it → eyeball the live sheet → iterate on the code. This gives version history/diffs per feature, reproducibility (rebuild from scratch), and reviewable changes before they hit the doc. Do **not** re-query the whole sheet every time a change is wanted — the code is the source of truth. Read the live sheet only to (a) resolve tab title → `sheetId` at apply-time, or (b) inspect current state when explicitly asked "what's there now?".
 
-const root = createRoot(document.body);
+**Two kinds of content — never conflate them:**
+- **Code-managed** (structure, formulas, number formats, conditional formatting, the Tables, the asset list + `Tgt. %` targets — these are config) → defined in builder modules.
+- **Sheet-managed** (the live balances/prices the formulas fetch, and the **Transactions ledger rows**) → runtime/user data. Add transactions in the sheet, not in code; the ledger in `transactions.ts` is a point-in-time `SEED` snapshot for reproducibility, not the source of truth.
 
-export default function Frontend() {
-  return <h1>Hello, world!</h1>;
-}
+**Layout:** `sheets/apply.ts` resolves tab titles → sheetIds and runs each module (`bun run sheet:build [tab] [--reset] [--dry-run]`); per-tab modules are `holdings.ts`, `transactions.ts`, `summary.ts`, `history.ts`; `sheets/lib.ts` holds helpers (`valuesAt`, `writeValues`, `oneOfList`, `TABLE_BANDING`, `teardownRequests`, `gws`, `resolveSheetMeta`). A module's `build()` returns `{ structure, values }`.
 
-root.render(<Frontend />);
-```
+**Creating a new tab:** a module whose tab doesn't exist yet sets `ensureSheetId` (a fixed, collision-free sheetId); the runner prepends an `addSheet` with that id so the module's own charts/formats can reference it in the same batch. Once created, the runner uses the existing sheetId and the `addSheet` is skipped (so re-runs don't re-create). `History` is the example.
 
-Then, run index.ts
+**Teardown (`--reset`) covers Tables, conditional-format rules, *and* charts** (`resolveSheetMeta`/`teardownRequests` track all three). A tab with charts or CF rules but no Table (Summary, History) still needs `--reset` to re-run — `addChart`/`addConditionalFormatRule` don't error on a repeat, they silently duplicate.
 
-```sh
-bun --hot ./index.ts
-```
+**Apply is two-phase, and the ordering is load-bearing:**
+1. **structure** (teardown + `addTable` + conditional formats) via `spreadsheets.batchUpdate`.
+2. **values** (cell content) via the **values API with `USER_ENTERED`** — *not* `updateCells`/`formulaValue`, which stores formulas that fail to bind structured Table refs and render `#ERROR!`.
 
-For more information, read the Bun API docs in `node_modules/bun-types/docs/**.mdx`.
+Between the phases a freshly created Table needs ~10s+ to "settle" before its refs resolve, so `apply.ts` sleeps after an `addTable` (`SHEET_TABLE_SETTLE_MS`, default 12000).
 
-<!-- rtk-instructions v2 -->
+**Re-running:** modules emit `addTable` for a *fresh* build, so a plain re-run onto an already-built tab errors on `addTable` (atomic batch — nothing applies). Use **`--reset`** to tear down the tab's existing Table(s) + conditional-format rules first (CF before table — deleting a Table cascades to its in-range CF rules). For a content-only change (formula tweak) just write the values range. Always `--dry-run` first.
 
-# RTK (Rust Token Killer) - Token-Optimized Commands
+> **Dropdown chip colors are UI-only and NOT code-managed.** The Sheets API has no field for per-value dropdown colors (`DataValidationRule.condition.values` carry no color), so the builder only creates the dropdown *options* (Category, Risk, Side). The colored chips are set by hand in the UI and are **wiped whenever that tab is rebuilt with `--reset`** (the Table is deleted/recreated). Reapply them manually after a rebuild; avoid `--reset` on Transactions if you want to keep the `Side` chip colors.
 
-## Golden Rule
+## Toolchain & commands
 
-**Always prefix commands with `rtk`**. If RTK has a dedicated filter, it uses it. If not, it passes through unchanged. This means RTK is always safe to use.
-
-**Important**: Even in command chains with `&&`, use `rtk`:
+- **Runtime: Bun** (not Node), pinned with `gcloud` in `mise.toml` — `mise install` to provision. TypeScript runs through Bun (`noEmit`, bundler resolution, `.ts` extension imports); there is no build step and no `scripts` field in `package.json`.
 
 ```bash
+bun install              # deps (bun.lock)
+bunx tsc --noEmit        # typecheck
+bun test                 # *.test.ts (Bun test runner)
 
-# ❌ Wrong
+bun run as:pull          # remote Apps Script -> ./apps-script/src
+bun run as:push          # ./apps-script/src -> remote (replaces ALL files)
+bun run as:push --dry-run # validate the push without writing
 
-git add . && git commit -m "msg" && git push
-
-# ✅ Correct
-
-rtk git add . && rtk git commit -m "msg" && rtk git push
+bun run sheet:build [tab] [--reset] [--dry-run]   # apply the sheet builders (all tabs, or one)
 ```
 
-## RTK Commands by Workflow
+## Working with the remote via `gws`
 
-### Build & Compile (80-90% savings)
+`gws` is the Google Workspace CLI dev-dependency — invoke it as **`bunx gws`** (it is not on `$PATH`). Skills under `.claude/skills/` (`gws-shared`, `gws-sheets`, `gws-script`) document auth and methods; read `gws-shared` first. Auth uses the local keyring (`gws auth login`).
 
+Pattern for any call: discover with `bunx gws <service> --help`, inspect params with `bunx gws schema <service>.<resource>.<method>`, then pass `--params`/`--json`. Quote ranges in double quotes (`"Holdings!A1:O9"`) so the `!` survives the shell.
+
+### Apps Script: clasp-style pull/push
+
+`apps-script/sync.ts` (run via `bun run as:pull` / `as:push`) wraps `gws script projects getContent`/`updateContent` to sync the project to/from **`apps-script/src/`**. File-type mapping mirrors clasp: `SERVER_JS`→`.gs`, `HTML`→`.html`, the manifest→`appsscript.json`. The script id comes from `GOOGLE_APP_SCRIPT_ID`.
+
+`updateContent` **clears and replaces the entire project**, so push always sends the full file set — edit files in `apps-script/src/`, never push a partial set (the script refuses to push if `appsscript.json` is missing). Use `as:push --dry-run` to validate first, and confirm before any real push.
+
+### Sheets: builder + ad-hoc reads
+Build/refresh tab structure with `bun run sheet:build` (see *Developing the spreadsheet*). For one-off inspection:
 ```bash
-rtk cargo build         # Cargo build output
-rtk cargo check         # Cargo check output
-rtk cargo clippy        # Clippy warnings grouped by file (80%)
-rtk tsc                 # TypeScript errors grouped by file/code (83%)
-rtk lint                # ESLint/Biome violations grouped (84%)
-rtk prettier --check    # Files needing format only (70%)
-rtk next build          # Next.js build with route metrics (87%)
+bunx gws sheets +read --spreadsheet "$GOOGLE_SPREADSHEET_ID" --range "Holdings!A1:O9"
 ```
-
-### Test (60-99% savings)
-
-```bash
-rtk cargo test          # Cargo test failures only (90%)
-rtk go test             # Go test failures only (90%)
-rtk jest                # Jest failures only (99.5%)
-rtk vitest              # Vitest failures only (99.5%)
-rtk playwright test     # Playwright failures only (94%)
-rtk pytest              # Python test failures only (90%)
-rtk rake test           # Ruby test failures only (90%)
-rtk rspec               # RSpec test failures only (60%)
-rtk test <cmd>          # Generic test wrapper - failures only
-```
-
-### Git (59-80% savings)
-
-```bash
-rtk git status          # Compact status
-rtk git log             # Compact log (works with all git flags)
-rtk git diff            # Compact diff (80%)
-rtk git show            # Compact show (80%)
-rtk git add             # Ultra-compact confirmations (59%)
-rtk git commit          # Ultra-compact confirmations (59%)
-rtk git push            # Ultra-compact confirmations
-rtk git pull            # Ultra-compact confirmations
-rtk git branch          # Compact branch list
-rtk git fetch           # Compact fetch
-rtk git stash           # Compact stash
-rtk git worktree        # Compact worktree
-```
-
-Note: Git passthrough works for ALL subcommands, even those not explicitly listed.
-
-### GitHub (26-87% savings)
-
-```bash
-rtk gh pr view <num>    # Compact PR view (87%)
-rtk gh pr checks        # Compact PR checks (79%)
-rtk gh run list         # Compact workflow runs (82%)
-rtk gh issue list       # Compact issue list (80%)
-rtk gh api              # Compact API responses (26%)
-```
-
-### JavaScript/TypeScript Tooling (70-90% savings)
-
-```bash
-rtk pnpm list           # Compact dependency tree (70%)
-rtk pnpm outdated       # Compact outdated packages (80%)
-rtk pnpm install        # Compact install output (90%)
-rtk npm run <script>    # Compact npm script output
-rtk npx <cmd>           # Compact npx command output
-rtk prisma              # Prisma without ASCII art (88%)
-```
-
-### Files & Search (60-75% savings)
-
-```bash
-rtk ls <path>           # Tree format, compact (65%)
-rtk read <file>         # Code reading with filtering (60%)
-rtk grep <pattern>      # Search grouped by file (75%). Format flags (-c, -l, -L, -o, -Z) run raw.
-rtk find <pattern>      # Find grouped by directory (70%)
-```
-
-### Analysis & Debug (70-90% savings)
-
-```bash
-rtk err <cmd>           # Filter errors only from any command
-rtk log <file>          # Deduplicated logs with counts
-rtk json <file>         # JSON structure without values
-rtk deps                # Dependency overview
-rtk env                 # Environment variables compact
-rtk summary <cmd>       # Smart summary of command output
-rtk diff                # Ultra-compact diffs
-```
-
-### Infrastructure (85% savings)
-
-```bash
-rtk docker ps           # Compact container list
-rtk docker images       # Compact image list
-rtk docker logs <c>     # Deduplicated logs
-rtk kubectl get         # Compact resource list
-rtk kubectl logs        # Deduplicated pod logs
-```
-
-### Network (65-70% savings)
-
-```bash
-rtk curl <url>          # Compact HTTP responses (70%)
-rtk wget <url>          # Compact download output (65%)
-```
-
-### Meta Commands
-
-```bash
-rtk gain                # View token savings statistics
-rtk gain --history      # View command history with savings
-rtk discover            # Analyze Claude Code sessions for missed RTK usage
-rtk proxy <cmd>         # Run command without filtering (for debugging)
-rtk init                # Add RTK instructions to CLAUDE.md
-rtk init --global       # Add RTK to ~/.claude/CLAUDE.md
-```
-
-## Token Savings Overview
-
-| Category | Commands | Typical Savings |
-|----------|----------|-----------------|
-| Tests | vitest, playwright, cargo test | 90-99% |
-| Build | next, tsc, lint, prettier | 70-87% |
-| Git | status, log, diff, add, commit | 59-80% |
-| GitHub | gh pr, gh run, gh issue | 26-87% |
-| Package Managers | pnpm, npm, npx | 70-90% |
-| Files | ls, read, grep, find | 60-75% |
-| Infrastructure | docker, kubectl | 85% |
-| Network | curl, wget | 65-70% |
-
-Overall average: **60-90% token reduction** on common development operations.
-<!-- /rtk-instructions -->
-
-<!-- GSD:project-start source:PROJECT.md -->
-
-## Project
-
-**Crypto Portfolio Tracker**
-
-A personal Google Sheets crypto portfolio tracker that auto-fetches live prices and on-chain balances for a Hyperliquid wallet and a Solana wallet, computes DCA-weighted cost basis and unrealized PnL from a manual transaction log, and surfaces allocation health (target vs actual, drift, risk, yield). The spreadsheet structure is built and refreshed programmatically — the user never hand-edits the sheet layout, only enters DCA transactions.
-
-**Core Value:** See accurate unrealized PnL — live portfolio value measured against DCA-weighted cost basis — for the whole portfolio at a glance, refreshed automatically.
-
-### Constraints
-
-- **Tech stack**: Two isolated runtimes, two dependency sets, never mixed — local Node layout builder (`googleapis`) and Google Apps Script V8 data layer (no npm/module resolution). The Google Sheet is the only integration surface between them.
-- **Apps Script authoring**: TypeScript in `apps-script/src/`, compiled to flat `dist/`, pushed via `clasp`. Trigger/entry functions (`refreshAll`, `installTrigger`) must compile to top-level globals — no `import`/`export` between source files unless the bundler inlines to one file. Fails only at deploy time.
-- **No npm in Apps Script**: all network calls via `UrlFetchApp` against raw HTTP endpoints.
-- **Security**: service-account key local-only (gitignored, never pushed); Jupiter API key in Secret Manager; no private keys anywhere; all access read-only.
-- **Tooling**: Bun for root project tooling/tests (`bun test`); Node for the layout builder runtime.
-- **Idempotency**: layout `--update` must never clear DCA Log data rows — irreversible data-loss risk.
-
-<!-- GSD:project-end -->
-
-<!-- GSD:stack-start source:codebase/STACK.md -->
-
-## Technology Stack
-
-## Languages
-
-- TypeScript `^5` (resolved `5.9.3` per `bun.lock`) — entry point `index.ts`, configured by `tsconfig.json`
-- TypeScript `^5` — Apps Script data layer authored in `.ts` (`apps-script/src/`), compiled to `dist/` and pushed via `clasp`. TS provides typings only; Apps Script runs Google's V8 (no Node runtime, no npm).
-- JavaScript (ESM) — local layout builder (`layout-builder/src/*.js`)
-- Not detected
-
-## Runtime
-
-- Bun (latest; project created with Bun `1.3.14` per `README.md`)
-- Node (latest) — declared in `mise.toml` for tool provisioning
-- Node — local layout builder runtime (`layout-builder/`), talks to Google Sheets API via `googleapis`
-- Google Apps Script V8 — data layer runtime (`apps-script/`); no npm/module resolution, all network calls via `UrlFetchApp`
-- `mise.toml` pins `bun = "latest"` and `node = "latest"`
-- Note: `mise.toml` is listed in `.gitignore` (line 37) — tool config is local only
-- Bun (current root project)
-- Lockfile: present (`bun.lock`, lockfileVersion 1)
-- Planned sub-projects use their own dependency sets: `layout-builder/package.json` and `apps-script/package.json` (per `PLAN.md` §3) — two separate, non-mixed dependency sets
-
-## Frameworks
-
-- None — single-file scaffold
-- Google Apps Script (data layer) — time-driven triggers, `CacheService`, `PropertiesService`, `UrlFetchApp`, `ScriptApp`, `SpreadsheetApp`
-- `clasp` (`@google/clasp`) — Apps Script deployment toolchain (`clasp push` of `dist/`)
-- Bun's built-in test runner (`bun test`) is the project convention (per `CLAUDE.md`). No test files present yet.
-- esbuild or tsc — compiles `apps-script/src/*.ts` → `apps-script/dist/` (flat global-scope output required so trigger entry points are top-level functions)
-- `bun build` is the documented bundler for the root/Bun side (per `CLAUDE.md`)
-
-## Key Dependencies
-
-- `typescript` `^5` (peerDependency) — language tooling
-- `@types/bun` `latest` (devDependency, resolved `1.3.14`) — Bun type definitions
-- Transitive: `bun-types` `1.3.14`, `@types/node` `25.9.3`, `undici-types` `7.24.6`
-- `googleapis` — Google Sheets API client; service-account JWT auth (`google.auth.JWT` / `GoogleAuth`)
-- `typescript` — authoring
-- `@types/google-apps-script` — Apps Script typings
-- `@google/clasp` — deploy tooling
-- esbuild (or tsc) — build to flat `dist/`
-- `@nktkas/hyperliquid`, `@jup-ag/api`, `gill` — not used anywhere. All exchange/chain calls are raw HTTP via `UrlFetchApp`; no SDKs in either runtime.
-
-## Configuration
-
-- Targets/lib: `ESNext`; `module: Preserve`; `moduleResolution: bundler`; `moduleDetection: force`
-- `jsx: react-jsx`, `allowJs: true`, `types: ["bun"]`
-- `allowImportingTsExtensions: true`, `verbatimModuleSyntax: true`, `noEmit: true`
-- Strictness: `strict: true`, `skipLibCheck: true`, `noFallthroughCasesInSwitch: true`, `noUncheckedIndexedAccess: true`, `noImplicitOverride: true`
-- Relaxed: `noUnusedLocals: false`, `noUnusedParameters: false`, `noPropertyAccessFromIndexSignature: false`
-- Bun auto-loads `.env` (no `dotenv`, per `CLAUDE.md`)
-- `.env*` variants are gitignored (`.gitignore` lines 18–24). No `.env` file currently present.
-- Planned: layout builder spreadsheet ID via `config.js` or `.env`
-- Service-account key `layout-builder/service-account.key.json` — local only, gitignored, never pushed to Apps Script
-- Apps Script secrets via GCP Secret Manager (Jupiter API key) + `PropertiesService` (Script Properties) for wallet addresses, project ID, resource paths
-- `appsscript.json` — OAuth scopes (`spreadsheets`, `external_request`, `cloud-platform`, `script.scriptapp`), timezone/date pinning; copied into `dist/` on build
-- `.clasp.json` — `"rootDir": "dist"`, script ID; gitignored
-
-## Platform Requirements
-
-- Bun (latest) and Node (latest), provisioned via `mise`
-- Install: `bun install`; run: `bun run index.ts`
-- Planned: Google Cloud project with Sheets API + Secret Manager enabled; `clasp login`; a target spreadsheet shared with the service-account email (Editor)
-- Layout builder: runs locally/on-demand (`node src/index.js --build|--update`)
-- Data layer: deployed to Google Apps Script (sheet-bound), driven by a time-driven trigger (default 5-minute refresh)
-
-<!-- GSD:stack-end -->
-
-<!-- GSD:conventions-start source:CONVENTIONS.md -->
-
-## Conventions
-
-## Runtime & Tooling Rules (non-negotiable)
-
-- **Use Bun, never Node.js tooling.** `bun <file>` not `node`/`ts-node`; `bun install` not npm/yarn/pnpm; `bun test` not jest/vitest; `bun build` not webpack/esbuild; `bunx` not `npx`.
-- **Use Bun built-in APIs over npm packages:**
-- **No `dotenv`.** Bun auto-loads `.env`.
-- **Frontend:** HTML imports with `Bun.serve()` (React/CSS/Tailwind supported) — not `vite`.
-- **RTK prefix:** Per `CLAUDE.md`, prefix shell commands with `rtk` (token-optimized proxy), including inside `&&` chains.
-
-## Two-Runtime Boundary (from `PLAN.md`)
-
-- `layout-builder/` — local-only Node, uses `googleapis`, talks to the Sheets API.
-- `apps-script/` — authored in TypeScript, built to `dist/`, pushed via `clasp`. **No npm packages at runtime** (Google V8, no module resolution). All network calls use `UrlFetchApp` against raw HTTP endpoints.
-
-## Naming Patterns
-
-- Bun/TypeScript entry & utility files: lowercase, no extension drama — `index.ts`, `auth.js`, `config.js`, `dashboardSheet.js` (camelCase for multi-word in `layout-builder/`).
-- Apps Script source files: PascalCase — `Config.ts`, `Secrets.ts`, `HyperliquidApi.ts`, `JupiterApi.ts`, `SolanaRpc.ts`, `Cache.ts`, `Refresh.ts`, `Triggers.ts`.
-- Test files: `*.test.ts` co-located with source (Bun convention, see `CLAUDE.md` example `index.test.ts`).
-- camelCase — `getJupApiKey()`, `refreshAll()`, `installTrigger()`.
-- camelCase for locals/params.
-- UPPER_SNAKE_CASE for config keys / cache keys / Script Properties — `PRICES_ALL`, `SM_RESOURCE_PATH`, `HL_WALLET_ADDRESS`, `SOL_WALLET_ADDRESS`, `GCP_PROJECT_ID`, `FETCH_BALANCES`.
-- PascalCase (TypeScript default) — no established examples yet; follow standard `interface`/`type` PascalCase.
-
-## Code Style
-
-- No formatter config present (no `.prettierrc`, `.editorconfig`, `biome.json`).
-- Observed in `index.ts` / config files: 2-space indentation, double quotes, semicolons, trailing newline. Match this until a formatter is adopted.
-- No linter configured. Type safety is enforced via `tsconfig.json` `strict` mode instead (see below).
-- `"strict": true` — full strict mode.
-- `"noUncheckedIndexedAccess": true` — indexed access returns `T | undefined`; handle the `undefined` case.
-- `"noFallthroughCasesInSwitch": true` — every `case` must `break`/`return`.
-- `"noImplicitOverride": true` — use the `override` keyword when overriding.
-- `"verbatimModuleSyntax": true` — use `import type` / `export type` for type-only imports.
-- `"allowImportingTsExtensions": true` — `.ts` extensions in imports are allowed (Bun bundler mode).
-- `"noEmit": true` — Bun handles execution/bundling; tsc is type-check only.
-- `"jsx": "react-jsx"` — React JSX without explicit `React` import.
-- Disabled (allowed): `noUnusedLocals`, `noUnusedParameters`, `noPropertyAccessFromIndexSignature` are `false`.
-
-## Import Organization
-
-## Error Handling
-
-- **Wrap each external provider call in its own `try/catch`.** A Jupiter outage must not blank Hyperliquid prices.
-- **Never overwrite good data with an error.** On fetch failure, keep the last cached value and write a status/timestamp cell (`LastUpdated`, `Stale?`) instead.
-- Treat `CacheService` misses as normal (soft cache) — always fall back to a live fetch and re-cache.
-
-## Logging
-
-- Log raw API responses while wiring up `HyperliquidApi`/`JupiterApi`/`SolanaRpc` to confirm ticker/mint mapping.
-- Log rate-limit response headers where available to monitor headroom.
-
-## Comments
-
-- `tsconfig.json` uses inline `//` section banners to group settings — mirror that lightweight style for grouped config.
-- Explain non-obvious external-API quirks (e.g. XAUt ticker confirmation, mint-address registry rationale) inline, per `PLAN.md` open items.
-
-## Function Design
-
-- Favor single-responsibility provider functions (one per external API) so failures isolate cleanly.
-- Batch I/O: `PLAN.md` mandates a **single `setValues` batch write** to the sheet — never cell-by-cell; one batched fetch → one JSON blob → one cache key.
-
-## Module Design
-
-- `layout-builder/` (Node): normal ESM (`"type": "module"` in `package.json`).
-- `apps-script/`: **no module exports between own files**; rely on global scope, expose trigger entry points as top-level functions.
-
-## Single Source of Truth Rules (`PLAN.md`)
-
-- **Avg cost** computed only in the DCA Log summary block; the Dashboard `AVGCOST` references it — do not duplicate `SUMIF` logic.
-- **Asset registry** (Solana mint addresses + HL tickers) lives in one `Config` map per runtime so adding/removing an asset is a one-line change.
-
-<!-- GSD:conventions-end -->
-
-<!-- GSD:architecture-start source:ARCHITECTURE.md -->
-
-## Architecture
-
-## Overview
-
-## Architectural Pattern
-
-- **Build-time vs. run-time split** — the layout builder defines _structure_ (run on demand by a human); the Apps Script layer fills in _data_ (run on a schedule). Structure is version-controlled in code, not hand-built.
-- **Read-only safety boundary** — no private keys anywhere. All exchange/chain access is read-only (public wallet addresses + public price endpoints). Signing/auto-DCA is explicitly out of scope (`PLAN.md` §6.8).
-- **No-SDK raw-HTTP rule** — Apps Script runs Google's V8 with no npm/module resolution, so all network calls use `UrlFetchApp` against raw HTTP endpoints. SDKs (`@nktkas/hyperliquid`, `@jup-ag/api`, `gill`) are explicitly dropped (`PLAN.md` §2).
-
-## Layers (planned)
-
-### Layout builder (`layout-builder/`)
-
-- **Entry** — `src/index.js` with `--build` / `--update` flags
-- **Auth** — `src/auth.js`: service-account JWT (`google.auth.JWT` / `GoogleAuth` from `googleapis`)
-- **Sheet definitions** — `src/dashboardSheet.js` (Sheet 1), `src/dcaLogSheet.js` (Sheet 2)
-- **Config** — `src/config.js`: spreadsheet ID, sheet names, asset list
-
-### Data layer (`apps-script/src/`)
-
-- **Config / Secrets** — `Config.ts` (asset registry, refresh interval, cache TTL), `Secrets.ts` (PropertiesService + GCP Secret Manager for the Jupiter API key)
-- **Providers** — `HyperliquidApi.ts`, `JupiterApi.ts`, `SolanaRpc.ts` (each wraps `UrlFetchApp` against one raw endpoint)
-- **Cache** — `Cache.ts`: wraps `CacheService.getScriptCache()`; one batched JSON blob under one key (`PRICES_ALL`)
-- **Orchestration** — `Refresh.ts` (`refreshAll()` main trigger entry), `Triggers.ts` (install/remove time-driven trigger)
-
-## Data Flow (planned)
-
-```
-
-```
-
-```
-
-```
-
-## Key Abstractions (planned)
-
-- **Single-blob cache** (`PRICES_ALL`) — one fetch → one JSON blob → one cache key; all cell writes read from it. Treated as _soft_ (eviction before TTL is normal; always fall back to live fetch).
-- **Provider isolation** — each price/balance provider wrapped in independent try/catch so one outage doesn't blank the others (graceful degradation, `PLAN.md` §6.3).
-- **Config registry** — all Solana mint addresses + HL tickers live in one `Config` map so adding/removing an asset is a one-line change.
-- **Idempotent layout update** — the `--update` path re-applies headers/formats/validations/formulas only, never touching DCA Log data rows.
-
-## Entry Points
-
-- `index.ts` — Bun scaffold entry (`package.json` `"module"` field)
-- `layout-builder/src/index.js` — CLI entry (`--build` / `--update`)
-- `apps-script/src/Refresh.ts` → `refreshAll()` — trigger entry (must compile to a top-level global)
-- `apps-script/src/Triggers.ts` → `installTrigger()` / `removeTrigger()` — must compile to top-level globals
-
-## Architectural Constraints (planned, `PLAN.md` §2)
-
-- **Apps Script global scope** — trigger/entry functions must be top-level in compiled output. Avoid `import`/`export` between Apps Script source files unless the bundler inlines them into one flat file (concatenation-style global scope is how Apps Script links files).
-- **Two separate directories, runtimes, dependency sets** — never mixed.
-- **Service-account key is local only** — never committed, never pushed to Apps Script.
-
-<!-- GSD:architecture-end -->
-
-<!-- GSD:skills-start source:skills/ -->
-
-## Project Skills
-
-No project skills found. Add skills to any of: `.claude/skills/`, `.agents/skills/`, `.cursor/skills/`, `.github/skills/`, or `.codex/skills/` with a `SKILL.md` index file.
-<!-- GSD:skills-end -->
-
-<!-- GSD:workflow-start source:GSD defaults -->
-
-## GSD Workflow Enforcement
-
-Before using Edit, Write, or other file-changing tools, start work through a GSD command so planning artifacts and execution context stay in sync.
-
-Use these entry points:
-
-- `/gsd-quick` for small fixes, doc updates, and ad-hoc tasks
-- `/gsd-debug` for investigation and bug fixing
-- `/gsd-execute-phase` for planned phase work
-
-Do not make direct repo edits outside a GSD workflow unless the user explicitly asks to bypass it.
-<!-- GSD:workflow-end -->
-
-<!-- GSD:profile-start -->
-
-## Developer Profile
-
-> Profile not yet configured. Run `/gsd-profile-user` to generate your developer profile.
-> This section is managed by `generate-claude-profile` -- do not edit manually.
-<!-- GSD:profile-end -->
+Confirm before any write/delete; prefer `--dry-run` first.
