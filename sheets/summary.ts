@@ -64,22 +64,23 @@ const CAT_FIRST = 15; // Safe Haven … Crypto on 15..18, Total on 19
 const CAT_TOTAL = CAT_FIRST + CATEGORIES.length; // 19
 const RISK_FIRST = 23; // Low … High on 23..27
 
-// Risk Profile (row 3): target-weighted risk score on a 1–10 scale, normalized by Σ targets,
-// plus a label for the nearest tier. Uses each asset's hand-set Tgt. % as the weight — so
-// it's the *intended* risk posture, not current. The five tiers map to 2/4/6/8/10 (even
-// steps of 2, High = 10); the label divides by that step to recover the tier index.
+// Risk Profile (D2:F2, beside the rate): target-weighted risk score on a 1–10 scale,
+// normalized by Σ targets, plus a label for the nearest tier. Uses each asset's hand-set
+// Tgt. % as the weight — so it's the *intended* risk posture, not current. The five tiers
+// map to 2/4/6/8/10 (even steps of 2, High = 10); the label (keyed off the score in E2)
+// divides by that step to recover the tier index.
 const RISK_LEVELS = [2, 4, 6, 8, 10]; // parallel to RISKS (Low … High)
 const RISK_STEP = 2;
 const RISK_SCORE = `=(${RISKS.map((rk, i) => `SUMIF(Holdings[Risk], "${rk}", Holdings[Tgt. %])*${RISK_LEVELS[i]}`).join(" + ")}) / SUM(Holdings[Tgt. %])`;
-const RISK_LABEL = `=CHOOSE(ROUND(B3 / ${RISK_STEP}, 0), ${RISKS.map((rk) => `"${rk}"`).join(", ")})`;
+const RISK_LABEL = `=CHOOSE(ROUND(E2 / ${RISK_STEP}, 0), ${RISKS.map((rk) => `"${rk}"`).join(", ")})`;
 
 function grid(): Primitive[][] {
   const cat = CATEGORIES.map((c, i) => catRow(c, CAT_FIRST + i));
   const risk = RISKS.map((rk, i) => riskRow(rk, RISK_FIRST + i));
   return [
     ["Portfolio Summary"], // 1
-    ["USD → IDR rate", `=GOOGLEFINANCE("CURRENCY:USDIDR")`], // 2
-    ["Risk Profile", RISK_SCORE, RISK_LABEL], // 3 (score in B3, tier label in C3)
+    ["USD → IDR rate", `=GOOGLEFINANCE("CURRENCY:USDIDR")`, "", "Risk Profile", RISK_SCORE, RISK_LABEL], // 2 (rate A:B, risk profile D:F)
+    ["", "", ""], // 3 (blank; clears the old A3:C3 risk-profile cells)
     ["Headline KPIs"], // 4
     ["Metric", "USD", "IDR"], // 5
     ["Total Value", "=SUM(Holdings[Value])", `=B6*${RATE}`], // 6
@@ -112,6 +113,15 @@ const WHITE: Rgb = { red: 1, green: 1, blue: 1 };
 const BORDER: Rgb = { red: 0.78, green: 0.83, blue: 0.8 };
 const CF_GREEN: Rgb = { red: 0.8, green: 0.92, blue: 0.8 }; // PnL > 0
 const CF_RED: Rgb = { red: 0.97, green: 0.8, blue: 0.8 }; // PnL < 0
+const INK: Rgb = { red: 0.1, green: 0.1, blue: 0.1 }; // dark text for the risk chip
+// Risk gradient (parallel to RISKS, Low → High): green → yellow → orange → red.
+const RISK_COLORS: Rgb[] = [
+  { red: 0.78, green: 0.91, blue: 0.79 }, // Low
+  { red: 0.87, green: 0.93, blue: 0.7 }, // Low-Medium
+  { red: 0.99, green: 0.91, blue: 0.65 }, // Medium
+  { red: 0.98, green: 0.8, blue: 0.58 }, // Medium-High
+  { red: 0.96, green: 0.71, blue: 0.67 }, // High
+];
 
 const USD = `"$"#,##0.00`;
 const IDR = `"Rp"#,##0`;
@@ -156,6 +166,10 @@ const allBorders = (sheetId: number, r0: number, r1: number, c0: number, c1: num
 };
 const cfRule = (sheetId: number, r0: number, r1: number, c0: number, c1: number, type: string, rgbColor: Rgb): SheetRequest => ({
   addConditionalFormatRule: { index: 0, rule: { ranges: [rng(sheetId, r0, r1, c0, c1)], booleanRule: { condition: { type, values: [{ userEnteredValue: "0" }] }, format: { backgroundColorStyle: { rgbColor } } } } },
+});
+// Color a cell by exact text match (used for the risk tier chip).
+const cfText = (sheetId: number, r0: number, r1: number, c0: number, c1: number, value: string, bg: Rgb): SheetRequest => ({
+  addConditionalFormatRule: { index: 0, rule: { ranges: [rng(sheetId, r0, r1, c0, c1)], booleanRule: { condition: { type: "TEXT_EQ", values: [{ userEnteredValue: value }] }, format: { backgroundColorStyle: { rgbColor: bg }, textFormat: { bold: true, foregroundColorStyle: { rgbColor: INK } } } } } },
 });
 
 // A section divider band (row r, 0-based) spanning its block's width (cols 0..c1).
@@ -219,9 +233,12 @@ function styling(sheetId: number): SheetRequest[] {
     allBorders(sheetId, 21, 27, 0, 3),
 
     // Number formats.
-    numFmt(sheetId, 1, 2, 1, 2, "NUMBER", `#,##0`), // rate
-    numFmt(sheetId, 2, 3, 1, 2, "NUMBER", `0.0" / 10"`), // risk score (B3), 1–10 scale
-    text(sheetId, 2, 3, 2, 3, { bold: true, color: BRAND }), // risk tier label (C3)
+    numFmt(sheetId, 1, 2, 1, 2, "NUMBER", `#,##0`), // rate (B2)
+    numFmt(sheetId, 1, 2, 4, 5, "NUMBER", `0.0" / 10"`), // risk score (E2), 1–10 scale
+    text(sheetId, 1, 2, 3, 4, { bold: true, color: BRAND }), // "Risk Profile" label (D2)
+    text(sheetId, 1, 2, 5, 6, { bold: true }), // risk tier label (F2); color set by CF below
+    // Risk tier chip: color F2 by the tier it shows (green → red).
+    ...RISKS.map((rk, i) => cfText(sheetId, 1, 2, 5, 6, rk, RISK_COLORS[i] ?? CF_GREEN)),
     numFmt(sheetId, 5, 10, 1, 2, "CURRENCY", USD), // KPI USD
     numFmt(sheetId, 5, 10, 2, 3, "CURRENCY", IDR), // KPI IDR
     numFmt(sheetId, 10, 11, 1, 2, "PERCENT", PCT), // Return %
