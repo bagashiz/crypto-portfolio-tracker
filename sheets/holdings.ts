@@ -30,8 +30,9 @@ const TITLE = "Holdings";
 
 const HEADERS = [
   "Asset", "Category", "Risk", "Link", "Network", "Ticker/Mint",
-  "Qty.", "Price", "Value", "Cost Basis", "Tgt. %", "Act. %", "Dev. %",
-  "Unreal. PnL", "Real. PnL",
+  "Qty.", "Price", "Value", "Val. %",
+  "Tgt. %", "Tgt. Value", "Dev. %", "Dev. Value",
+  "Cost Basis", "Unreal. PnL", "Real. PnL",
 ] as const;
 
 type Network = "Hyperliquid" | "Solana" | "Hyperliquid & Solana";
@@ -74,9 +75,18 @@ const fPrice = (r: number) =>
 const fValue = (r: number) => `=G${r}*H${r}`;
 const fCost = (r: number) =>
   `=SUMIFS(Transactions[Amount], Transactions[Asset], A${r}, Transactions[Side], "BUY") + SUMIFS(Transactions[Fees], Transactions[Asset], A${r}, Transactions[Side], "BUY") - SUMIFS(Transactions[Amount], Transactions[Asset], A${r}, Transactions[Side], "SELL")`;
-const F_ACT = `=IF(SUM(Holdings[Value])=0, 0, ROUND(Holdings[Value] / SUM(Holdings[Value]), 4))`;
-const fDev = (r: number) => `=K${r}-L${r}`;
+// Val. % — the asset's actual share of total value (= Value ÷ Σ Value).
+const F_VAL = `=IF(SUM(Holdings[Value])=0, 0, ROUND(Holdings[Value] / SUM(Holdings[Value]), 4))`;
+// Plain column arithmetic, so structured refs (position-independent — the % and Value
+// columns sit interleaved, so an A1 ref like K-L would break if columns are reordered).
+const F_DEV = `=Holdings[Tgt. %]-Holdings[Val. %]`;
 const F_UPNL = `=Holdings[Value]-Holdings[Cost Basis]`;
+// Target dollar position: the asset's target share of the WHOLE portfolio value, i.e. how
+// much should sit in this asset. Plain column arithmetic, so structured refs (cf. Val. %).
+const F_TGTVAL = `=Holdings[Tgt. %]*SUM(Holdings[Value])`;
+// Dollar deviation from target: +ve means under-allocated (buy this much), -ve over-allocated
+// (trim this much). Equivalent to Dev. % × Σ Value.
+const F_DEVVAL = `=Holdings[Tgt. Value]-Holdings[Value]`;
 // Realized PnL (weighted-average cost): sell proceeds (net of fees) minus the average
 // buy cost of the units sold. Zero until there are SELL rows for the asset.
 const fReal = (r: number) => `=LET(
@@ -92,9 +102,10 @@ function rowFor(a: Asset, r: number): Primitive[] {
   return [
     a.asset, a.category, a.risk, a.link, a.network, a.tickerOrMint,
     fQty(r), fPrice(r), fValue(r),
+    F_VAL,
+    a.target, F_TGTVAL,
+    F_DEV, F_DEVVAL,
     a.cash ? null : fCost(r),
-    a.target,
-    F_ACT, fDev(r),
     a.cash ? null : F_UPNL,
     a.cash ? null : fReal(r),
   ];
@@ -113,15 +124,17 @@ const COLUMNS = [
   { columnIndex: 6, columnName: "Qty." },
   { columnIndex: 7, columnName: "Price", columnType: "CURRENCY" },
   { columnIndex: 8, columnName: "Value", columnType: "CURRENCY" },
-  { columnIndex: 9, columnName: "Cost Basis", columnType: "CURRENCY" },
+  { columnIndex: 9, columnName: "Val. %", columnType: "PERCENT" },
   { columnIndex: 10, columnName: "Tgt. %", columnType: "PERCENT" },
-  { columnIndex: 11, columnName: "Act. %", columnType: "PERCENT" },
+  { columnIndex: 11, columnName: "Tgt. Value", columnType: "CURRENCY" },
   { columnIndex: 12, columnName: "Dev. %", columnType: "PERCENT" },
-  { columnIndex: 13, columnName: "Unreal. PnL", columnType: "CURRENCY" },
-  { columnIndex: 14, columnName: "Real. PnL", columnType: "CURRENCY" },
+  { columnIndex: 13, columnName: "Dev. Value", columnType: "CURRENCY" },
+  { columnIndex: 14, columnName: "Cost Basis", columnType: "CURRENCY" },
+  { columnIndex: 15, columnName: "Unreal. PnL", columnType: "CURRENCY" },
+  { columnIndex: 16, columnName: "Real. PnL", columnType: "CURRENCY" },
 ];
 
-// Conditional formatting on the PnL columns (N:O): green when > 0, red when < 0.
+// Conditional formatting on the PnL columns (P:Q): green when > 0, red when < 0.
 const PNL_GREEN = { red: 0.5764706, green: 0.76862746, blue: 0.49019608 };
 const PNL_RED = { red: 0.8784314, green: 0.4, blue: 0.4 };
 
@@ -130,7 +143,7 @@ function pnlRule(sheetId: number, type: "NUMBER_GREATER" | "NUMBER_LESS", rgbCol
     addConditionalFormatRule: {
       index: 0,
       rule: {
-        ranges: [{ sheetId, startRowIndex: 0, endRowIndex: 9, startColumnIndex: 13, endColumnIndex: 15 }],
+        ranges: [{ sheetId, startRowIndex: 0, endRowIndex: 9, startColumnIndex: 15, endColumnIndex: 17 }],
         booleanRule: {
           condition: { type, values: [{ userEnteredValue: "0" }] },
           format: { backgroundColorStyle: { rgbColor } },
