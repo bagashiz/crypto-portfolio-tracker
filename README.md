@@ -178,5 +178,7 @@ bunx gws sheets +read --spreadsheet "$GOOGLE_SPREADSHEET_ID" --range "Holdings!A
 
 ## License
 
-Personal project — no warranty. Use at your own risk; nothing here is financial advice.
-```
+Released under the **[Beer-Ware License](./LICENSE)** (Revision 42) — do whatever you want with it; if we ever meet and you think it's worth it, buy me a beer.
+
+No warranty. Use at your own risk; nothing here is financial advice.
+
