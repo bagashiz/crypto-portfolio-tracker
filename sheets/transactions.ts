@@ -16,8 +16,9 @@ import {
  * calculated column (= Qty × Price).
  *
  * The ledger ROWS are SHEET-MANAGED user data — add transactions in the sheet,
- * not here. `SEED` is a point-in-time snapshot so the tab is reproducible from
- * scratch; applying it overwrites whatever rows currently exist.
+ * not here. `SEED` is just an ILLUSTRATIVE placeholder set (round, made-up
+ * figures — not real trades) so the tab is reproducible from scratch; applying it
+ * OVERWRITES whatever rows currently exist, so don't re-apply over a live ledger.
  */
 const TITLE = "Transactions";
 
@@ -33,11 +34,12 @@ interface Txn {
   fees: number;
 }
 
+// Illustrative placeholders only — round, made-up figures, not real trades.
 const SEED: Txn[] = [
-  { date: "=DATE(2026,6,21)", asset: "BTC", side: "BUY", qty: 0.0000094818, price: 60666, fees: 0 },
-  { date: "=DATE(2026,6,21)", asset: "HYPE", side: "BUY", qty: 0.00993473, price: 56.828, fees: 0 },
-  { date: "=DATE(2026,6,21)", asset: "XAUt", side: "BUY", qty: 0.00997889, price: 4217.5, fees: 0 },
-  { date: "=DATE(2026,6,21)", asset: "IVVon", side: "BUY", qty: 0.014921479, price: 761.42, fees: 0 },
+  { date: "=DATE(2026,1,1)", asset: "BTC", side: "BUY", qty: 0.001, price: 60000, fees: 0 },
+  { date: "=DATE(2026,1,1)", asset: "HYPE", side: "BUY", qty: 1, price: 50, fees: 0 },
+  { date: "=DATE(2026,1,1)", asset: "XAUt", side: "BUY", qty: 0.01, price: 4000, fees: 0 },
+  { date: "=DATE(2026,1,1)", asset: "IVVon", side: "BUY", qty: 0.01, price: 750, fees: 0 },
 ];
 
 // Bare `Table[Column]` resolves to the current row in a Table's calculated column;
