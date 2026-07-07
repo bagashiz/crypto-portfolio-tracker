@@ -393,11 +393,23 @@ function valueForHoldingsRow(network, id) {
 }
 
 /**
+ * Locate a Holdings column index (0-based) by its header name, so column reorders in the
+ * builder don't silently shift what this trigger reads. Throws if the header is missing.
+ */
+function holdingsColIndex(header, columnName) {
+  const idx = header.indexOf(columnName);
+  if (idx === -1) throw new Error(`Holdings column not found: ${columnName}`);
+  return idx;
+}
+
+/**
  * Compute portfolio totals. Total Value is fetched FRESH (price/balance are custom
  * functions); Cost Basis and Realized PnL are read from the Holdings columns because those
  * are native SUMIFS formulas over Transactions and always recalc reliably.
  *
- * Holdings columns (1-based): E=5 Network, F=6 Ticker/Mint, J=10 Cost Basis, O=15 Real. PnL.
+ * Columns are resolved BY HEADER NAME (Network, Ticker/Mint, Cost Basis, Real. PnL), not by
+ * fixed index — the Holdings layout is code-managed and gets reordered, which previously
+ * mis-read Val. % as Cost Basis and Cost Basis as Real. PnL.
  */
 function computePortfolioTotals() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(HOLDINGS_SHEET);
@@ -406,7 +418,14 @@ function computePortfolioTotals() {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) throw new Error("Holdings has no data rows");
 
-  const rows = sheet.getRange(2, 1, lastRow - 1, 15).getValues();
+  const lastCol = sheet.getLastColumn();
+  const header = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  const cNetwork = holdingsColIndex(header, "Network");
+  const cId = holdingsColIndex(header, "Ticker/Mint");
+  const cCost = holdingsColIndex(header, "Cost Basis");
+  const cReal = holdingsColIndex(header, "Real. PnL");
+
+  const rows = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
 
   let totalValue = 0;
   let costBasis = 0;
@@ -414,11 +433,11 @@ function computePortfolioTotals() {
 
   for (const row of rows) {
     if (!row[0]) continue; // no Asset name => not a data row
-    const network = String(row[4]);
-    const id = String(row[5]);
+    const network = String(row[cNetwork]);
+    const id = String(row[cId]);
     totalValue += valueForHoldingsRow(network, id);
-    costBasis += Number(row[9]) || 0;
-    realizedPnl += Number(row[14]) || 0;
+    costBasis += Number(row[cCost]) || 0;
+    realizedPnl += Number(row[cReal]) || 0;
   }
 
   const unrealizedPnl = totalValue - costBasis;
