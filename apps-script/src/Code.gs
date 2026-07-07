@@ -476,3 +476,76 @@ function setupDailySnapshotTrigger() {
     .atHour(23)
     .create();
 }
+
+/* -------------------------------------------------------------------------- */
+/* Manual refresh (custom menu)                                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Simple trigger: add the "Portfolio" menu on open. Just builds the menu (no
+ * authorization needed); the item itself runs refreshPortfolio with full auth.
+ */
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu("Portfolio")
+    .addItem("🔄 Refresh prices", "refreshPortfolio")
+    .addToUi();
+}
+
+/**
+ * Drop the price/balance cache, then force the Holdings live cells to re-run so the
+ * custom functions refetch immediately (clearing the cache alone does nothing — the
+ * cells keep their last value until a recalc). Invoked from Portfolio ▸ Refresh prices.
+ *
+ * Only the CacheService hot copies are removed; the STALE_* fallbacks in Script
+ * Properties are left in place (they're the failure fallback and get overwritten on the
+ * next successful fetch anyway).
+ */
+function refreshPortfolio() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(HOLDINGS_SHEET);
+  if (!sheet) throw new Error(`Sheet not found: ${HOLDINGS_SHEET}`);
+
+  const lastRow = sheet.getLastRow();
+  const lastCol = sheet.getLastColumn();
+  const header = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  const cNetwork = holdingsColIndex(header, "Network");
+  const cId = holdingsColIndex(header, "Ticker/Mint");
+
+  // Per-mint Jupiter price keys are only cached for Solana rows (HL uses one bulk key).
+  const keys = [CACHE_KEYS.HL_PRICES, CACHE_KEYS.HL_BALANCES, CACHE_KEYS.JUP_BALANCES];
+  const rows = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+  for (const row of rows) {
+    if (!row[0]) continue;
+    if (String(row[cNetwork]) === "Solana") {
+      keys.push("JUP_PRICE_" + String(row[cId]).trim());
+    }
+  }
+  CacheService.getScriptCache().removeAll(keys);
+
+  forceHoldingsRecalc(sheet, header);
+  ss.toast("Prices refreshed", "Portfolio", 5);
+}
+
+/**
+ * Force the Holdings Qty./Price custom-function cells to re-execute by blanking their
+ * formulas, flushing, then restoring them — with the cache cleared, the restore makes the
+ * functions fetch fresh. Everything downstream (Value, Val.%, PnL, Summary) recomputes.
+ */
+function forceHoldingsRecalc(sheet, header) {
+  const numRows = sheet.getLastRow() - 1;
+  if (numRows < 1) return;
+
+  const qtyRange = sheet.getRange(2, holdingsColIndex(header, "Qty.") + 1, numRows, 1);
+  const priceRange = sheet.getRange(2, holdingsColIndex(header, "Price") + 1, numRows, 1);
+  const qtyFormulas = qtyRange.getFormulas();
+  const priceFormulas = priceRange.getFormulas();
+
+  qtyRange.clearContent();
+  priceRange.clearContent();
+  SpreadsheetApp.flush();
+
+  qtyRange.setFormulas(qtyFormulas);
+  priceRange.setFormulas(priceFormulas);
+  SpreadsheetApp.flush();
+}
