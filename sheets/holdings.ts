@@ -138,6 +138,18 @@ const COLUMNS = [
 const PNL_GREEN = { red: 0.5764706, green: 0.76862746, blue: 0.49019608 };
 const PNL_RED = { red: 0.8784314, green: 0.4, blue: 0.4 };
 
+// Freezes column A so Asset stays visible when scrolling horizontally past the PnL
+// columns. Idempotent (just (re)sets a sheet property), so unlike addTable/
+// addConditionalFormatRule it's safe to apply on every run without needing --reset.
+function freezeAssetColumn(sheetId: number): SheetRequest {
+  return {
+    updateSheetProperties: {
+      properties: { sheetId, gridProperties: { frozenColumnCount: 1 } },
+      fields: "gridProperties.frozenColumnCount",
+    },
+  };
+}
+
 function pnlRule(sheetId: number, type: "NUMBER_GREATER" | "NUMBER_LESS", rgbColor: object): SheetRequest {
   return {
     addConditionalFormatRule: {
@@ -161,6 +173,7 @@ export const holdings: TabModule = {
     const grid: Primitive[][] = [[...HEADERS], ...ASSETS.map((a, i) => rowFor(a, i + 2))];
     return {
       structure: [
+        freezeAssetColumn(sheetId),
         {
           addTable: {
             table: {
