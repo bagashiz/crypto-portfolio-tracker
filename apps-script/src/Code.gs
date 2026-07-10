@@ -410,6 +410,13 @@ function holdingsColIndex(header, columnName) {
  * Columns are resolved BY HEADER NAME (Network, Ticker/Mint, Cost Basis, Real. PnL), not by
  * fixed index — the Holdings layout is code-managed and gets reordered, which previously
  * mis-read Val. % as Cost Basis and Cost Basis as Real. PnL.
+ *
+ * Cash rows (USDC) have no Cost Basis — Holdings leaves that cell BLANK, not zero — so they
+ * must be excluded from Unreal./Real. PnL, same as Summary's `SUM(Holdings[Unreal. PnL])`
+ * does (that per-row column is blank for cash too). Computing PnL as a single
+ * `totalValue - costBasis` at the portfolio level double-counts cash: totalValue includes
+ * the cash balance but costBasis doesn't, so the whole cash balance reads as fake profit.
+ * Summing per-row instead nets each invested asset's own Value against its own Cost Basis.
  */
 function computePortfolioTotals() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(HOLDINGS_SHEET);
@@ -429,18 +436,23 @@ function computePortfolioTotals() {
 
   let totalValue = 0;
   let costBasis = 0;
+  let unrealizedPnl = 0;
   let realizedPnl = 0;
 
   for (const row of rows) {
     if (!row[0]) continue; // no Asset name => not a data row
     const network = String(row[cNetwork]);
     const id = String(row[cId]);
-    totalValue += valueForHoldingsRow(network, id);
-    costBasis += Number(row[cCost]) || 0;
+    const value = valueForHoldingsRow(network, id);
+    totalValue += value;
+
+    if (row[cCost] === "") continue; // cash row: no cost basis, excluded from PnL
+    const cost = Number(row[cCost]) || 0;
+    costBasis += cost;
+    unrealizedPnl += value - cost;
     realizedPnl += Number(row[cReal]) || 0;
   }
 
-  const unrealizedPnl = totalValue - costBasis;
   const totalPnl = unrealizedPnl + realizedPnl;
 
   return { totalValue, costBasis, unrealizedPnl, realizedPnl, totalPnl };
