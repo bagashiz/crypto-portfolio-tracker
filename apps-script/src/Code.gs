@@ -475,7 +475,7 @@ function snapshotPortfolio() {
  * One-time setup: install the daily trigger for snapshotPortfolio. Triggers can't be
  * created by pushing code, so RUN THIS ONCE from the Apps Script editor (it will prompt for
  * authorization). Re-running replaces the existing snapshot trigger rather than duplicating.
- * Fires daily around 23:00 in the project timezone (Asia/Jakarta).
+ * Fires daily around midnight in the project timezone (Asia/Jakarta).
  */
 function setupDailySnapshotTrigger() {
   ScriptApp.getProjectTriggers()
@@ -485,7 +485,7 @@ function setupDailySnapshotTrigger() {
   ScriptApp.newTrigger("snapshotPortfolio")
     .timeBased()
     .everyDays(1)
-    .atHour(23)
+    .atHour(0)
     .create();
 }
 
