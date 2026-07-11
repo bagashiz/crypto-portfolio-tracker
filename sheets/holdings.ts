@@ -153,11 +153,12 @@ function freezeAssetColumn(sheetId: number): SheetRequest {
   };
 }
 
-// Money columns for the privacy mask (Portfolio ▸ Hide amounts): Price+Value are adjacent
-// (H:I), then Tgt. Value stands alone (L), then Dev. Value..Real. PnL run together (N:Q).
+// Money columns for the privacy mask (Portfolio ▸ Hide amounts). Price (H) is deliberately
+// EXCLUDED — it's a per-unit market price, not a position size, so it stays visible; only
+// Value (I) onward reveals how much is actually held/invested.
 function privacyRanges(sheetId: number, rows: number): SheetRequest[] {
   return [
-    { sheetId, startRowIndex: 1, endRowIndex: rows, startColumnIndex: 7, endColumnIndex: 9 }, // Price, Value
+    { sheetId, startRowIndex: 1, endRowIndex: rows, startColumnIndex: 8, endColumnIndex: 9 }, // Value
     { sheetId, startRowIndex: 1, endRowIndex: rows, startColumnIndex: 11, endColumnIndex: 12 }, // Tgt. Value
     { sheetId, startRowIndex: 1, endRowIndex: rows, startColumnIndex: 13, endColumnIndex: 17 }, // Dev. Value..Real. PnL
   ];
