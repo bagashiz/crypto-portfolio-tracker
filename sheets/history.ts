@@ -1,10 +1,13 @@
 import {
   valuesAt,
+  privacyMaskRule,
+  PRIVACY_FOLLOWER_CELL,
   type BuildContext,
   type BuildResult,
   type Primitive,
   type SheetRequest,
   type TabModule,
+  type ValueRange,
 } from "./lib.ts";
 
 /**
@@ -81,8 +84,13 @@ export const history: TabModule = {
         // Charts: portfolio value (Value + Cost Basis), then PnL (Unreal/Real/Total).
         lineChart(sheetId, "Portfolio Value Over Time", [1, 2], 1),
         lineChart(sheetId, "PnL Over Time", [3, 4, 5], 18),
+        // Money columns B:F — bounded generously (row 1000) so future snapshot rows stay masked.
+        privacyMaskRule(
+          [{ sheetId, startRowIndex: 1, endRowIndex: 1000, startColumnIndex: 1, endColumnIndex: 6 }],
+          PRIVACY_FOLLOWER_CELL,
+        ),
       ],
-      values: [valuesAt(TITLE, grid)],
+      values: [valuesAt(TITLE, grid), { range: "History!Z1", values: [[false]] } satisfies ValueRange],
     };
   },
 };

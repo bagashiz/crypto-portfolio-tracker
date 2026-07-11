@@ -77,6 +77,46 @@ export async function writeValues(spreadsheetId: string, ranges: ValueRange[], d
   ]);
 }
 
+/**
+ * The privacy checkbox lives at Summary!H1, but a CUSTOM_FORMULA conditional-format rule
+ * CANNOT reference another sheet at all (confirmed against the live Sheets API: even a
+ * same-sheet-qualified formula like `='Summary'!$H$1` is rejected when the rule lives on a
+ * different tab — a hard platform limitation, not a request-shape bug). So every masked tab
+ * needs its OWN local flag cell; Code.gs's `syncPrivacyFollowers` mirrors Summary!H1 onto
+ * each one whenever it changes (menu click or a direct click on the H1 checkbox via onEdit).
+ * `$Z$1` is just unused space, off past every tab's real columns/Table/chart.
+ */
+export const PRIVACY_FOLLOWER_CELL = "$Z$1";
+
+/** Solid redaction-bar color (background AND font, so the text disappears into the block). */
+export const PRIVACY_MASK_COLOR = { red: 0, green: 0, blue: 0 };
+
+/**
+ * A conditional-format rule that blacks out `ranges` (same color for background + font) when
+ * `flagCellA1` (a LOCAL cell on the same tab as `ranges` — see PRIVACY_FOLLOWER_CELL) is TRUE
+ * — a pure visual overlay: no cell value, formula, or number format is touched, so nothing
+ * downstream (other formulas, charts) can break. Give this rule `index: 0` relative to any
+ * pre-existing CF rules on the same ranges (add it AFTER them in the structure array) so it
+ * wins over e.g. the PnL green/red rules when active.
+ */
+export function privacyMaskRule(ranges: Record<string, unknown>[], flagCellA1: string): SheetRequest {
+  return {
+    addConditionalFormatRule: {
+      index: 0,
+      rule: {
+        ranges,
+        booleanRule: {
+          condition: { type: "CUSTOM_FORMULA", values: [{ userEnteredValue: `=${flagCellA1}=TRUE` }] },
+          format: {
+            backgroundColorStyle: { rgbColor: PRIVACY_MASK_COLOR },
+            textFormat: { foregroundColorStyle: { rgbColor: PRIVACY_MASK_COLOR } },
+          },
+        },
+      },
+    },
+  };
+}
+
 /** Shared Table banding (olive header + zebra rows) used by the Holdings and Transactions tables. */
 export const TABLE_BANDING = {
   headerColorStyle: { rgbColor: { red: 0.20784314, green: 0.40784314, blue: 0.32941177 } },

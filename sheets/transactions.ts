@@ -1,11 +1,14 @@
 import {
   valuesAt,
   oneOfList,
+  privacyMaskRule,
+  PRIVACY_FOLLOWER_CELL,
   TABLE_BANDING,
   type BuildContext,
   type BuildResult,
   type Primitive,
   type TabModule,
+  type ValueRange,
 } from "./lib.ts";
 
 /**
@@ -81,8 +84,14 @@ export const transactions: TabModule = {
             },
           },
         },
+        // Money columns (Price, Amount, Fees) are contiguous — one rect. Bounded generously
+        // (row 1000) rather than to `rows` so newly-added ledger entries stay masked too.
+        privacyMaskRule(
+          [{ sheetId, startRowIndex: 1, endRowIndex: 1000, startColumnIndex: 4, endColumnIndex: 7 }],
+          PRIVACY_FOLLOWER_CELL,
+        ),
       ],
-      values: [valuesAt(TITLE, grid)],
+      values: [valuesAt(TITLE, grid), { range: "Transactions!Z1", values: [[false]] } satisfies ValueRange],
     };
   },
 };

@@ -377,6 +377,8 @@ function USDC_BALANCE() {
 
 const HOLDINGS_SHEET = "Holdings";
 const HISTORY_SHEET = "History";
+const TRANSACTIONS_SHEET = "Transactions";
+const SUMMARY_SHEET = "Summary";
 
 /**
  * Fresh USD value for one Holdings row, routed by its Network column. Mirrors the
@@ -490,17 +492,28 @@ function setupDailySnapshotTrigger() {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Manual refresh (custom menu)                                                */
+/* Custom menu (refresh + privacy)                                            */
 /* -------------------------------------------------------------------------- */
 
 /**
  * Simple trigger: add the "Portfolio" menu on open. Just builds the menu (no
- * authorization needed); the item itself runs refreshPortfolio with full auth.
+ * authorization needed); the items themselves run with full auth.
  */
 function onOpen() {
+  refreshPortfolioMenu();
+}
+
+/**
+ * (Re)builds the "Portfolio" menu. Split out from onOpen so togglePrivacyMode can call it
+ * too — re-creating the menu with the same name replaces it, letting the privacy item's
+ * label flip (Hide/Show) immediately after a click instead of only on the next sheet open.
+ */
+function refreshPortfolioMenu() {
+  const hidden = isPrivacyModeOn();
   SpreadsheetApp.getUi()
     .createMenu("Portfolio")
-    .addItem("🔄 Refresh prices", "refreshPortfolio")
+    .addItem("Refresh prices", "refreshPortfolio")
+    .addItem(hidden ? "Show amounts" : "Hide amounts", "togglePrivacyMode")
     .addToUi();
 }
 
@@ -560,4 +573,66 @@ function forceHoldingsRecalc(sheet, header) {
   qtyRange.setFormulas(qtyFormulas);
   priceRange.setFormulas(priceFormulas);
   SpreadsheetApp.flush();
+}
+
+/* -------------------------------------------------------------------------- */
+/* Privacy mode (custom menu)                                                 */
+/* -------------------------------------------------------------------------- */
+
+const PRIVACY_FLAG_CELL = "H1"; // Summary!H1 — the user-facing checkbox
+const PRIVACY_FOLLOWER_CELL = "Z1"; // same boolean, mirrored onto each masked tab
+const PRIVACY_FOLLOWER_SHEETS = [HOLDINGS_SHEET, TRANSACTIONS_SHEET, HISTORY_SHEET];
+
+function isPrivacyModeOn() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SUMMARY_SHEET);
+  if (!sheet) throw new Error(`Sheet not found: ${SUMMARY_SHEET}`);
+  return sheet.getRange(PRIVACY_FLAG_CELL).getValue() === true;
+}
+
+/**
+ * Mirrors the Summary!H1 privacy checkbox onto each masked tab's own local Z1 cell. Every
+ * tab's privacy-mask conditional-format rule (see the builder modules in sheets/) reads its
+ * OWN local cell rather than Summary!H1 directly, because a CUSTOM_FORMULA conditional-format
+ * rule cannot reference another sheet at all — confirmed against the live Sheets API, which
+ * rejects even a same-sheet-qualified formula (e.g. `='Summary'!$H$1`) when the rule lives on
+ * a different tab. This keeps the masking purely visual: no cell value, formula, or number
+ * format is ever touched, so nothing downstream (Val. %, Summary's rollups, the charts) can
+ * break the way it did with the two earlier approaches (number-format swap: blocked by
+ * Sheets Tables' typed-column restriction; cell-content swap: cascaded #VALUE! errors).
+ */
+function syncPrivacyFollowers(on) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  for (const name of PRIVACY_FOLLOWER_SHEETS) {
+    const sheet = ss.getSheetByName(name);
+    if (sheet) sheet.getRange(PRIVACY_FOLLOWER_CELL).setValue(on);
+  }
+}
+
+/** Flips the Summary!H1 privacy checkbox and mirrors it to the follower cells. Invoked from
+ * Portfolio ▸ Hide/Show amounts. */
+function togglePrivacyMode() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(SUMMARY_SHEET);
+  if (!sheet) throw new Error(`Sheet not found: ${SUMMARY_SHEET}`);
+
+  const range = sheet.getRange(PRIVACY_FLAG_CELL);
+  const on = !(range.getValue() === true);
+  range.setValue(on);
+  syncPrivacyFollowers(on);
+
+  ss.toast(on ? "Amounts hidden" : "Amounts visible", "Portfolio", 5);
+  refreshPortfolioMenu();
+}
+
+/**
+ * Simple trigger: keeps the follower cells in sync if the user clicks the Summary!H1
+ * checkbox directly in the sheet instead of using the menu (togglePrivacyMode already syncs
+ * on that path, so this only fires for a genuine user edit — Apps Script simple triggers
+ * don't re-fire for a script's own Range.setValue() calls).
+ */
+function onEdit(e) {
+  if (!e || !e.range) return;
+  if (e.range.getSheet().getName() !== SUMMARY_SHEET) return;
+  if (e.range.getA1Notation() !== PRIVACY_FLAG_CELL) return;
+  syncPrivacyFollowers(e.range.getValue() === true);
 }

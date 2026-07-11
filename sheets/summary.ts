@@ -1,10 +1,12 @@
 import {
   valuesAt,
+  privacyMaskRule,
   type BuildContext,
   type BuildResult,
   type Primitive,
   type SheetRequest,
   type TabModule,
+  type ValueRange,
 } from "./lib.ts";
 
 /**
@@ -43,6 +45,11 @@ const RISKS = ["Low", "Low-Medium", "Medium", "Medium-High", "High"] as const;
 // Anchor cells (B2 = USD→IDR rate, B6 = Total Value) the rollups lean on.
 const RATE = "$B$2";
 const TOTAL_VALUE = "$B$6";
+
+// G1/H1 sit outside the title banner (merged A1:F1) and above the first chart's anchor row
+// (row 4+), so they're free real estate for a small control: H1 is the privacy checkbox
+// `PRIVACY_FLAG_REF` (sheets/lib.ts) points at, driving every tab's privacy-mask CF rule.
+const PRIVACY_LABEL_RANGE = "Summary!G1"; // G1:H1 — label + the checkbox itself
 
 // Per-row formula generators (r = 1-based sheet row).
 const catRow = (name: string, r: number): Primitive[] => [
@@ -187,6 +194,15 @@ const header = (sheetId: number, r: number, c1: number): SheetRequest[] => [
   align(sheetId, r, r + 1, 1, c1, { h: "RIGHT" }),
 ];
 
+// H1 checkbox (BOOLEAN data validation) + a small muted "Privacy" label at G1.
+function privacyControl(sheetId: number): SheetRequest[] {
+  return [
+    { setDataValidation: { range: rng(sheetId, 0, 1, 7, 8), rule: { condition: { type: "BOOLEAN" }, strict: true } } },
+    text(sheetId, 0, 1, 6, 7, { bold: false, fontSize: 8, color: { red: 0.5, green: 0.5, blue: 0.5 } }),
+    align(sheetId, 0, 1, 6, 7, { h: "RIGHT", v: "MIDDLE" }),
+  ];
+}
+
 function styling(sheetId: number): SheetRequest[] {
   return [
     // Canvas: drop gridlines, widen the label column, give room for IDR figures.
@@ -313,14 +329,25 @@ export const summary: TabModule = {
   title: TITLE,
   build(ctx: BuildContext): BuildResult {
     const sheetId = ctx.sheetId(TITLE);
+    // Money ranges masked by the privacy checkbox: KPI USD+IDR, category Value + Rebalance $,
+    // risk Value. Kept in sync with the row anchors above (CAT_FIRST, RISK_FIRST).
+    const moneyRanges = [
+      { sheetId, startRowIndex: 5, endRowIndex: 10, startColumnIndex: 1, endColumnIndex: 3 }, // B6:C10
+      { sheetId, startRowIndex: CAT_FIRST - 1, endRowIndex: CAT_TOTAL - 1, startColumnIndex: 1, endColumnIndex: 2 }, // B15:B18
+      { sheetId, startRowIndex: CAT_FIRST - 1, endRowIndex: CAT_TOTAL - 1, startColumnIndex: 5, endColumnIndex: 6 }, // F15:F18
+      { sheetId, startRowIndex: RISK_FIRST - 1, endRowIndex: RISK_FIRST - 1 + RISKS.length, startColumnIndex: 1, endColumnIndex: 2 }, // B23:B27
+    ];
+    const privacyValues: ValueRange = { range: PRIVACY_LABEL_RANGE, values: [["Privacy", false]] };
     return {
       structure: [
         ...styling(sheetId),
+        ...privacyControl(sheetId),
+        privacyMaskRule(moneyRanges, "$H$1"),
         pie(sheetId, "Allocation by Category", CAT_FIRST, CATEGORIES.length, 3),
         tgtVsAct(sheetId, 19),
         pie(sheetId, "Allocation by Risk", RISK_FIRST, RISKS.length, 35),
       ],
-      values: [valuesAt(TITLE, grid())],
+      values: [valuesAt(TITLE, grid()), privacyValues],
     };
   },
 };

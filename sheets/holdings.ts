@@ -1,12 +1,15 @@
 import {
   valuesAt,
   oneOfList,
+  privacyMaskRule,
+  PRIVACY_FOLLOWER_CELL,
   TABLE_BANDING,
   type BuildContext,
   type BuildResult,
   type Primitive,
   type SheetRequest,
   type TabModule,
+  type ValueRange,
 } from "./lib.ts";
 
 /**
@@ -150,6 +153,16 @@ function freezeAssetColumn(sheetId: number): SheetRequest {
   };
 }
 
+// Money columns for the privacy mask (Portfolio ▸ Hide amounts): Price+Value are adjacent
+// (H:I), then Tgt. Value stands alone (L), then Dev. Value..Real. PnL run together (N:Q).
+function privacyRanges(sheetId: number, rows: number): SheetRequest[] {
+  return [
+    { sheetId, startRowIndex: 1, endRowIndex: rows, startColumnIndex: 7, endColumnIndex: 9 }, // Price, Value
+    { sheetId, startRowIndex: 1, endRowIndex: rows, startColumnIndex: 11, endColumnIndex: 12 }, // Tgt. Value
+    { sheetId, startRowIndex: 1, endRowIndex: rows, startColumnIndex: 13, endColumnIndex: 17 }, // Dev. Value..Real. PnL
+  ];
+}
+
 function pnlRule(sheetId: number, type: "NUMBER_GREATER" | "NUMBER_LESS", rgbColor: object): SheetRequest {
   return {
     addConditionalFormatRule: {
@@ -186,8 +199,9 @@ export const holdings: TabModule = {
         },
         pnlRule(sheetId, "NUMBER_GREATER", PNL_GREEN),
         pnlRule(sheetId, "NUMBER_LESS", PNL_RED),
+        privacyMaskRule(privacyRanges(sheetId, rows), PRIVACY_FOLLOWER_CELL),
       ],
-      values: [valuesAt(TITLE, grid)],
+      values: [valuesAt(TITLE, grid), { range: "Holdings!Z1", values: [[false]] } satisfies ValueRange],
     };
   },
 };
