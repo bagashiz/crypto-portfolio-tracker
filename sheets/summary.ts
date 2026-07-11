@@ -57,8 +57,11 @@ const catRow = (name: string, r: number): Primitive[] => [
   `=SUMIF(Holdings[Category], A${r}, Holdings[Value])`,
   `=SUMIF(Holdings[Category], A${r}, Holdings[Tgt. %])`,
   `=IF(${TOTAL_VALUE}=0, 0, B${r}/${TOTAL_VALUE})`,
-  `=C${r}-D${r}`, // Dev % = Tgt − Act
-  `=E${r}*${TOTAL_VALUE}`, // $ to buy (+) / trim (−) to hit target
+  // Dev % = Act − Tgt (standard convention: +ve overweight, -ve underweight — matches
+  // Holdings' Dev. %/Dev. Value). NOT an action signal; Rebalance $ below is deliberately
+  // the opposite sign of this.
+  `=D${r}-C${r}`,
+  `=(C${r}-D${r})*${TOTAL_VALUE}`, // $ to buy (+) / trim (−) to hit target — independent of Dev %'s sign, not a multiple of it
 ];
 const riskRow = (name: string, r: number): Primitive[] => [
   name,

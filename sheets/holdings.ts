@@ -82,14 +82,18 @@ const fCost = (r: number) =>
 const F_VAL = `=IF(SUM(Holdings[Value])=0, 0, ROUND(Holdings[Value] / SUM(Holdings[Value]), 4))`;
 // Plain column arithmetic, so structured refs (position-independent — the % and Value
 // columns sit interleaved, so an A1 ref like K-L would break if columns are reordered).
-const F_DEV = `=Holdings[Tgt. %]-Holdings[Val. %]`;
+// Standard finance convention: deviation = Actual − Target. +ve = overweight (holding more
+// than target), -ve = underweight (holding less). NOT an action signal — see Real. PnL's
+// sibling "Rebalance $" on Summary for the buy(+)/trim(−) framing, which is intentionally
+// the opposite sign of this.
+const F_DEV = `=Holdings[Val. %]-Holdings[Tgt. %]`;
 const F_UPNL = `=Holdings[Value]-Holdings[Cost Basis]`;
 // Target dollar position: the asset's target share of the WHOLE portfolio value, i.e. how
 // much should sit in this asset. Plain column arithmetic, so structured refs (cf. Val. %).
 const F_TGTVAL = `=Holdings[Tgt. %]*SUM(Holdings[Value])`;
-// Dollar deviation from target: +ve means under-allocated (buy this much), -ve over-allocated
-// (trim this much). Equivalent to Dev. % × Σ Value.
-const F_DEVVAL = `=Holdings[Tgt. Value]-Holdings[Value]`;
+// Dollar deviation from target (Actual − Target, same convention as Dev. %): +ve = holding
+// more than target (overweight), -ve = holding less (underweight). Equivalent to Dev. % × Σ Value.
+const F_DEVVAL = `=Holdings[Value]-Holdings[Tgt. Value]`;
 // Realized PnL (weighted-average cost): sell proceeds (net of fees) minus the average
 // buy cost of the units sold. Zero until there are SELL rows for the asset.
 const fReal = (r: number) => `=LET(
