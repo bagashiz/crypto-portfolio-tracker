@@ -53,6 +53,12 @@ function rowFor(t: Txn): Primitive[] {
   return [t.date, t.asset, t.side, t.qty, t.price, F_AMOUNT, t.fees];
 }
 
+// Amount is left UNTYPED in the Table (below) rather than columnType: "CURRENCY" — a typed
+// column's number format is locked by the Sheets API (can't be set per-cell after the fact;
+// see the privacy-mask design notes in CLAUDE.md), so its USD format is applied separately
+// via a plain repeatCell instead, matching how Summary formats its currency cells.
+const USD = `"$"#,##0.00`;
+
 // NOTE: the Side BUY/SELL dropdown options are code-managed, but their chip COLORS are
 // not (no Sheets API field for it). They're set by hand in the UI and wiped by --reset, so
 // avoid rebuilding this tab if you want to keep them.
@@ -84,8 +90,21 @@ export const transactions: TabModule = {
             },
           },
         },
-        // Money columns (Price, Amount, Fees) are contiguous — one rect. Bounded generously
-        // (row 1000) rather than to `rows` so newly-added ledger entries stay masked too.
+        // Amount's USD format (Amount is untyped in the Table — see COLUMNS note above).
+        {
+          repeatCell: {
+            range: { sheetId, startRowIndex: 1, endRowIndex: 1000, startColumnIndex: 5, endColumnIndex: 6 },
+            cell: { userEnteredFormat: { numberFormat: { type: "CURRENCY", pattern: USD } } },
+            fields: "userEnteredFormat.numberFormat",
+          },
+        },
+        // Money columns (Price, Amount, Fees) are contiguous — one rect. `endRowIndex: 1000`
+        // is aspirational, not guaranteed: the Sheets API silently CLAMPS a request's range to
+        // the sheet's current gridProperties.rowCount at apply time (this tab is intentionally
+        // kept small, not grown to 1000 rows just to make this range "stick" — see CLAUDE.md).
+        // A ledger row added past the sheet's current bottom won't be covered by this rule
+        // until it's re-applied (`sheet:build transactions --reset`, which also re-clamps to
+        // whatever the grid is at that point).
         privacyMaskRule(
           [{ sheetId, startRowIndex: 1, endRowIndex: 1000, startColumnIndex: 4, endColumnIndex: 7 }],
           PRIVACY_FOLLOWER_CELL,
