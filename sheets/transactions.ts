@@ -15,7 +15,7 @@ import {
  * Transactions tab — the buy/sell ledger that feeds Holdings' cost basis.
  *
  * Reproduces the `Transactions` Table (Date as DATE_TIME, Side as a BUY/SELL
- * dropdown, Price/Fees as CURRENCY, banding) + the header + the `Amount`
+ * dropdown, Price/Amount/Fees as CURRENCY, banding) + the header + the `Amount`
  * calculated column (= Qty × Price).
  *
  * The ledger ROWS are SHEET-MANAGED user data — add transactions in the sheet,
@@ -53,12 +53,6 @@ function rowFor(t: Txn): Primitive[] {
   return [t.date, t.asset, t.side, t.qty, t.price, F_AMOUNT, t.fees];
 }
 
-// Amount is left UNTYPED in the Table (below) rather than columnType: "CURRENCY" — a typed
-// column's number format is locked by the Sheets API (can't be set per-cell after the fact;
-// see the privacy-mask design notes in CLAUDE.md), so its USD format is applied separately
-// via a plain repeatCell instead, matching how Summary formats its currency cells.
-const USD = `"$"#,##0.00`;
-
 // NOTE: the Side BUY/SELL dropdown options are code-managed, but their chip COLORS are
 // not (no Sheets API field for it). They're set by hand in the UI and wiped by --reset, so
 // avoid rebuilding this tab if you want to keep them.
@@ -68,7 +62,7 @@ const COLUMNS = [
   { columnIndex: 2, columnName: "Side", columnType: "DROPDOWN", dataValidationRule: oneOfList(["BUY", "SELL"]) },
   { columnIndex: 3, columnName: "Qty." },
   { columnIndex: 4, columnName: "Price", columnType: "CURRENCY" },
-  { columnIndex: 5, columnName: "Amount" },
+  { columnIndex: 5, columnName: "Amount", columnType: "CURRENCY" },
   { columnIndex: 6, columnName: "Fees", columnType: "CURRENCY" },
 ];
 
@@ -88,14 +82,6 @@ export const transactions: TabModule = {
               columnProperties: COLUMNS,
               rowsProperties: TABLE_BANDING,
             },
-          },
-        },
-        // Amount's USD format (Amount is untyped in the Table — see COLUMNS note above).
-        {
-          repeatCell: {
-            range: { sheetId, startRowIndex: 1, endRowIndex: 1000, startColumnIndex: 5, endColumnIndex: 6 },
-            cell: { userEnteredFormat: { numberFormat: { type: "CURRENCY", pattern: USD } } },
-            fields: "userEnteredFormat.numberFormat",
           },
         },
         // Money columns (Price, Amount, Fees) are contiguous — one rect. `endRowIndex: 1000`
