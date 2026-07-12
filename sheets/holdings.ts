@@ -76,8 +76,20 @@ const fQty = (r: number) =>
 const fPrice = (r: number) =>
   `=IF(E${r}="Hyperliquid & Solana", 1, IF(E${r}="Hyperliquid", HL_PRICE(F${r}), IF(E${r}="Solana", JUP_PRICE(F${r}), "")))`;
 const fValue = (r: number) => `=G${r}*H${r}`;
-const fCost = (r: number) =>
-  `=SUMIFS(Transactions[Amount], Transactions[Asset], A${r}, Transactions[Side], "BUY") + SUMIFS(Transactions[Fees], Transactions[Asset], A${r}, Transactions[Side], "BUY") - SUMIFS(Transactions[Amount], Transactions[Asset], A${r}, Transactions[Side], "SELL")`;
+// Cost Basis = weighted-average cost per unit (buy amount + buy fees, ÷ buy qty) × the
+// REMAINING qty (buy qty − sell qty) — not a raw dollar netting of buys minus sells. A
+// simple `buyAmount - sellAmount` only happens to work while nothing's been sold; once a
+// SELL exists it strands leftover cost basis on an already-closed (or partially-closed)
+// position, which Unreal. PnL then re-books as a second loss/gain on top of what Real. PnL
+// already captured for the units actually sold — see the matching comment on fReal below,
+// which uses the same per-unit average so the two columns never double-count.
+const fCost = (r: number) => `=LET(
+  buyAmount, SUMIFS(Transactions[Amount], Transactions[Asset], A${r}, Transactions[Side], "BUY"),
+  buyFees,   SUMIFS(Transactions[Fees],   Transactions[Asset], A${r}, Transactions[Side], "BUY"),
+  buyQty,    SUMIFS(Transactions[Qty.],   Transactions[Asset], A${r}, Transactions[Side], "BUY"),
+  sellQty,   SUMIFS(Transactions[Qty.],   Transactions[Asset], A${r}, Transactions[Side], "SELL"),
+  IF(buyQty=0, 0, (buyAmount + buyFees) / buyQty * (buyQty - sellQty))
+)`;
 // Val. % — the asset's actual share of total value (= Value ÷ Σ Value).
 const F_VAL = `=IF(SUM(Holdings[Value])=0, 0, ROUND(Holdings[Value] / SUM(Holdings[Value]), 4))`;
 // Plain column arithmetic, so structured refs (position-independent — the % and Value
@@ -94,15 +106,19 @@ const F_TGTVAL = `=Holdings[Tgt. %]*SUM(Holdings[Value])`;
 // Dollar deviation from target (Actual − Target, same convention as Dev. %): +ve = holding
 // more than target (overweight), -ve = holding less (underweight). Equivalent to Dev. % × Σ Value.
 const F_DEVVAL = `=Holdings[Value]-Holdings[Tgt. Value]`;
-// Realized PnL (weighted-average cost): sell proceeds (net of fees) minus the average
-// buy cost of the units sold. Zero until there are SELL rows for the asset.
+// Realized PnL (weighted-average cost, fees included in the per-unit cost — see fCost):
+// sell proceeds net of sell fees, minus the average buy cost (incl. buy fees) of the units
+// sold. Zero until there are SELL rows for the asset. Uses the SAME per-unit average as
+// fCost so the two columns always partition the total buy cost exactly once between
+// "still held" (Cost Basis) and "sold" (this) — never both.
 const fReal = (r: number) => `=LET(
   sellProceeds, SUMIFS(Transactions[Amount], Transactions[Asset], A${r}, Transactions[Side], "SELL"),
   sellFees,     SUMIFS(Transactions[Fees],   Transactions[Asset], A${r}, Transactions[Side], "SELL"),
   sellQty,      SUMIFS(Transactions[Qty.],   Transactions[Asset], A${r}, Transactions[Side], "SELL"),
   buyAmount,    SUMIFS(Transactions[Amount], Transactions[Asset], A${r}, Transactions[Side], "BUY"),
+  buyFees,      SUMIFS(Transactions[Fees],   Transactions[Asset], A${r}, Transactions[Side], "BUY"),
   buyQty,       SUMIFS(Transactions[Qty.],   Transactions[Asset], A${r}, Transactions[Side], "BUY"),
-  IF(buyQty=0, 0, sellProceeds - sellFees - (buyAmount / buyQty) * sellQty)
+  IF(buyQty=0, 0, sellProceeds - sellFees - (buyAmount + buyFees) / buyQty * sellQty)
 )`;
 
 function rowFor(a: Asset, r: number): Primitive[] {
