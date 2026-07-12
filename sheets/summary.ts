@@ -39,7 +39,7 @@ import {
 const TITLE = "Summary";
 
 // Category order drives both the table rows and the pie/column charts.
-const CATEGORIES = ["Safe Haven", "RWA Yield", "Equity", "Crypto"] as const;
+const CATEGORIES = ["Cash", "Fixed Income", "Commodity", "Equity", "Crypto"] as const;
 const RISKS = ["Low", "Low-Medium", "Medium", "Medium-High", "High"] as const;
 
 // Anchor cells (B2 = USD→IDR rate, B6 = Total Value) the rollups lean on.
@@ -69,10 +69,16 @@ const riskRow = (name: string, r: number): Primitive[] => [
   `=IF(${TOTAL_VALUE}=0, 0, B${r}/${TOTAL_VALUE})`,
 ];
 
-// Fixed row anchors (1-based) for the two grouped tables.
-const CAT_FIRST = 15; // Safe Haven … Crypto on 15..18, Total on 19
-const CAT_TOTAL = CAT_FIRST + CATEGORIES.length; // 19
-const RISK_FIRST = 23; // Low … High on 23..27
+// Row anchors (1-based) for the two grouped tables. CAT_TOTAL and everything below it is
+// DERIVED from CATEGORIES.length, not hardcoded — the category block was resized once
+// already (4 → 5 rows) and the styling/chart ranges below lean on these vars rather than
+// literal row numbers so a future recount doesn't require re-deriving them by hand.
+const CAT_FIRST = 15; // Cash … Crypto on 15..19, Total on 20
+const CAT_TOTAL = CAT_FIRST + CATEGORIES.length; // 20
+const RISK_SECTION = CAT_TOTAL + 2; // "Risk Breakdown" section title row (blank row in between)
+const RISK_HEADER = RISK_SECTION + 1; // header row
+const RISK_FIRST = RISK_HEADER + 1; // Low … High start row
+const RISK_LAST = RISK_FIRST + RISKS.length - 1;
 
 // Risk Profile (D2:F2, beside the rate): target-weighted risk score on a 1–10 scale,
 // normalized by Σ targets, plus a label for the nearest tier. Uses each asset's hand-set
@@ -102,12 +108,19 @@ function grid(): Primitive[][] {
     [""], // 12
     ["Allocation by Category"], // 13
     ["Category", "Value (USD)", "Tgt %", "Act %", "Dev %", "Rebalance $"], // 14
-    ...cat, // 15..18
-    ["Total", `=SUM(B${CAT_FIRST}:B18)`, `=SUM(C${CAT_FIRST}:C18)`, `=SUM(D${CAT_FIRST}:D18)`, `=SUM(E${CAT_FIRST}:E18)`, `=SUM(F${CAT_FIRST}:F18)`], // 19
-    [""], // 20
-    ["Risk Breakdown"], // 21
-    ["Risk", "Value (USD)", "Act %"], // 22
-    ...risk, // 23..27
+    ...cat, // CAT_FIRST..CAT_TOTAL-1
+    [
+      "Total",
+      `=SUM(B${CAT_FIRST}:B${CAT_TOTAL - 1})`,
+      `=SUM(C${CAT_FIRST}:C${CAT_TOTAL - 1})`,
+      `=SUM(D${CAT_FIRST}:D${CAT_TOTAL - 1})`,
+      `=SUM(E${CAT_FIRST}:E${CAT_TOTAL - 1})`,
+      `=SUM(F${CAT_FIRST}:F${CAT_TOTAL - 1})`,
+    ], // CAT_TOTAL
+    [""], // blank
+    ["Risk Breakdown"], // RISK_SECTION
+    ["Risk", "Value (USD)", "Act %"], // RISK_HEADER
+    ...risk, // RISK_FIRST..RISK_LAST
   ];
 }
 
@@ -206,7 +219,7 @@ function styling(sheetId: number): SheetRequest[] {
     rowHeight(sheetId, 0, 1, 40), // title
     rowHeight(sheetId, 3, 4, 26),
     rowHeight(sheetId, 12, 13, 26),
-    rowHeight(sheetId, 20, 21, 26),
+    rowHeight(sheetId, RISK_SECTION - 1, RISK_SECTION, 26),
 
     // Title banner (A1:F1).
     merge(sheetId, 0, 1, 0, 6),
@@ -217,30 +230,50 @@ function styling(sheetId: number): SheetRequest[] {
     // Section dividers (KPI/risk are 3 wide, category is 6).
     ...section(sheetId, 3, 3),
     ...section(sheetId, 12, 6),
-    ...section(sheetId, 20, 3),
+    ...section(sheetId, RISK_SECTION - 1, 3),
 
     // Table header rows.
     ...header(sheetId, 4, 3),
     ...header(sheetId, 13, 6),
-    ...header(sheetId, 21, 3),
+    ...header(sheetId, RISK_HEADER - 1, 3),
 
     // Zebra striping on the data rows.
     fill(sheetId, 6, 7, 0, 3, ZEBRA),
     fill(sheetId, 8, 9, 0, 3, ZEBRA),
     fill(sheetId, 10, 11, 0, 3, ZEBRA),
-    fill(sheetId, 15, 16, 0, 6, ZEBRA),
-    fill(sheetId, 17, 18, 0, 6, ZEBRA),
-    fill(sheetId, 23, 24, 0, 3, ZEBRA),
-    fill(sheetId, 25, 26, 0, 3, ZEBRA),
+    // Clear stale per-row fill/bold left behind by a PREVIOUS build with a different
+    // CATEGORIES/RISKS row count (e.g. the old Total row's bold+fill lands on a data row
+    // once the block shifts) before laying down the highlights below — makes a rebuild
+    // idempotent regardless of how many rows the block had last time.
+    fill(sheetId, CAT_FIRST - 1, CAT_TOTAL, 0, 6, WHITE),
+    text(sheetId, CAT_FIRST - 1, CAT_TOTAL, 0, 6, { bold: false }),
+    fill(sheetId, RISK_FIRST - 1, RISK_LAST, 0, 3, WHITE),
+    // Category/risk blocks: shade every other data row (2nd, 4th, …).
+    ...(() => {
+      const rules: SheetRequest[] = [];
+      for (let i = 1; i < CATEGORIES.length; i += 2) {
+        rules.push(fill(sheetId, CAT_FIRST - 1 + i, CAT_FIRST + i, 0, 6, ZEBRA));
+      }
+      for (let i = 1; i < RISKS.length; i += 2) {
+        rules.push(fill(sheetId, RISK_FIRST - 1 + i, RISK_FIRST + i, 0, 3, ZEBRA));
+      }
+      return rules;
+    })(),
 
-    // Category Total row (row 19): emphasized fill + bold.
-    fill(sheetId, 18, 19, 0, 6, TOTAL_BG),
-    text(sheetId, 18, 19, 0, 6, { bold: true }),
+    // Category Total row: emphasized fill + bold.
+    fill(sheetId, CAT_TOTAL - 1, CAT_TOTAL, 0, 6, TOTAL_BG),
+    text(sheetId, CAT_TOTAL - 1, CAT_TOTAL, 0, 6, { bold: true }),
+
+    // Gap row between the Total row and "Risk Breakdown": explicitly reset to white — a
+    // previous build's stale fill/bold can otherwise bleed through here too (see the
+    // clear-before-highlight comment above).
+    fill(sheetId, CAT_TOTAL, CAT_TOTAL + 1, 0, 6, WHITE),
+    text(sheetId, CAT_TOTAL, CAT_TOTAL + 1, 0, 6, { bold: false }),
 
     // Block borders for definition.
     allBorders(sheetId, 4, 11, 0, 3),
-    allBorders(sheetId, 13, 19, 0, 6),
-    allBorders(sheetId, 21, 27, 0, 3),
+    allBorders(sheetId, 13, CAT_TOTAL, 0, 6),
+    allBorders(sheetId, RISK_HEADER - 1, RISK_LAST, 0, 3),
 
     // Number formats.
     numFmt(sheetId, 1, 2, 1, 2, "NUMBER", `#,##0`), // rate (B2)
@@ -252,11 +285,11 @@ function styling(sheetId: number): SheetRequest[] {
     numFmt(sheetId, 5, 10, 1, 2, "CURRENCY", USD), // KPI USD
     numFmt(sheetId, 5, 10, 2, 3, "CURRENCY", IDR), // KPI IDR
     numFmt(sheetId, 10, 11, 1, 2, "PERCENT", PCT), // Return %
-    numFmt(sheetId, 14, 19, 1, 2, "CURRENCY", USD), // category Value
-    numFmt(sheetId, 14, 19, 2, 5, "PERCENT", PCT), // Tgt/Act/Dev
-    numFmt(sheetId, 14, 19, 5, 6, "CURRENCY", USD), // Rebalance $
-    numFmt(sheetId, 22, 27, 1, 2, "CURRENCY", USD), // risk Value
-    numFmt(sheetId, 22, 27, 2, 3, "PERCENT", PCT), // risk Act %
+    numFmt(sheetId, CAT_FIRST - 1, CAT_TOTAL, 1, 2, "CURRENCY", USD), // category Value
+    numFmt(sheetId, CAT_FIRST - 1, CAT_TOTAL, 2, 5, "PERCENT", PCT), // Tgt/Act/Dev
+    numFmt(sheetId, CAT_FIRST - 1, CAT_TOTAL, 5, 6, "CURRENCY", USD), // Rebalance $
+    numFmt(sheetId, RISK_FIRST - 1, RISK_LAST, 1, 2, "CURRENCY", USD), // risk Value
+    numFmt(sheetId, RISK_FIRST - 1, RISK_LAST, 2, 3, "PERCENT", PCT), // risk Act %
 
     // Green/red on the PnL figures (rows 8..11, USD + IDR). CF overrides the zebra fill.
     cfRule(sheetId, 7, 11, 1, 3, "NUMBER_GREATER", CF_GREEN),

@@ -42,7 +42,7 @@ type Network = "Hyperliquid" | "Solana" | "Hyperliquid & Solana";
 
 interface Asset {
   asset: string;
-  category: "Crypto" | "Equity" | "RWA Yield" | "Safe Haven";
+  category: "Crypto" | "Equity" | "Fixed Income" | "Commodity" | "Cash";
   risk: "Low" | "Low-Medium" | "Medium" | "Medium-High" | "High";
   link: string;
   network: Network;
@@ -58,11 +58,11 @@ const ASSETS: Asset[] = [
   { asset: "BTC", category: "Crypto", risk: "High", link: "https://app.hyperliquid.xyz/trade/BTC/USDC", network: "Hyperliquid", tickerOrMint: "UBTC", target: 0.15 },
   { asset: "HYPE", category: "Crypto", risk: "High", link: "https://app.hyperliquid.xyz/trade/HYPE/USDC", network: "Hyperliquid", tickerOrMint: "HYPE", target: 0.05 },
   { asset: "IVVon", category: "Equity", risk: "Medium-High", link: "https://jup.ag/tokens/CqW2pd6dCPG9xKZfAsTovzDsMmAGKJSDBNcwM96ondo", network: "Solana", tickerOrMint: "CqW2pd6dCPG9xKZfAsTovzDsMmAGKJSDBNcwM96ondo", target: 0.05 },
-  { asset: "PST", category: "RWA Yield", risk: "Medium", link: "https://app.huma.finance/", network: "Solana", tickerOrMint: "59obFNBzyTBGowrkif5uK7ojS58vsuWz3ZCvg6tfZAGw", target: 0.2 },
-  { asset: "ONyc", category: "RWA Yield", risk: "Medium-High", link: "https://www.orca.so/trade?tokenIn=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v&tokenOut=5Y8NV33Vv7WbnLfq3zBcKSdYPrk7g2KoiQoe7M2tcxp5", network: "Solana", tickerOrMint: "5Y8NV33Vv7WbnLfq3zBcKSdYPrk7g2KoiQoe7M2tcxp5", target: 0.15 },
-  { asset: "USDy", category: "RWA Yield", risk: "Low-Medium", link: "https://www.orca.so/trade?tokenIn=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v&tokenOut=A1KLoBrKBde8Ty9qtNQUtq3C2ortoC3u7twggz7sEto6", network: "Solana", tickerOrMint: "A1KLoBrKBde8Ty9qtNQUtq3C2ortoC3u7twggz7sEto6", target: 0.15 },
-  { asset: "XAUt", category: "Safe Haven", risk: "Low-Medium", link: "https://app.hyperliquid.xyz/trade/XAUT/USDC", network: "Hyperliquid", tickerOrMint: "XAUT0", target: 0.15 },
-  { asset: "USDC", category: "Safe Haven", risk: "Low", link: "", network: "Hyperliquid & Solana", tickerOrMint: "USDC/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", target: 0.1, cash: true },
+  { asset: "PST", category: "Fixed Income", risk: "Medium", link: "https://app.huma.finance/", network: "Solana", tickerOrMint: "59obFNBzyTBGowrkif5uK7ojS58vsuWz3ZCvg6tfZAGw", target: 0.2 },
+  { asset: "ONyc", category: "Fixed Income", risk: "Medium-High", link: "https://www.orca.so/trade?tokenIn=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v&tokenOut=5Y8NV33Vv7WbnLfq3zBcKSdYPrk7g2KoiQoe7M2tcxp5", network: "Solana", tickerOrMint: "5Y8NV33Vv7WbnLfq3zBcKSdYPrk7g2KoiQoe7M2tcxp5", target: 0.15 },
+  { asset: "USDy", category: "Fixed Income", risk: "Low-Medium", link: "https://www.orca.so/trade?tokenIn=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v&tokenOut=A1KLoBrKBde8Ty9qtNQUtq3C2ortoC3u7twggz7sEto6", network: "Solana", tickerOrMint: "A1KLoBrKBde8Ty9qtNQUtq3C2ortoC3u7twggz7sEto6", target: 0.15 },
+  { asset: "XAUt", category: "Commodity", risk: "Low-Medium", link: "https://app.hyperliquid.xyz/trade/XAUT/USDC", network: "Hyperliquid", tickerOrMint: "XAUT0", target: 0.15 },
+  { asset: "USDC", category: "Cash", risk: "Low", link: "", network: "Hyperliquid & Solana", tickerOrMint: "USDC/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", target: 0.1, cash: true },
 ];
 
 // Formulas, generated per row `r` (sheet row, 1-based). IMPORTANT: columns that feed a
@@ -123,7 +123,7 @@ function rowFor(a: Asset, r: number): Primitive[] {
 // hand in the UI; they're wiped on every --reset rebuild of this tab.
 const COLUMNS = [
   { columnIndex: 0, columnName: "Asset" },
-  { columnIndex: 1, columnName: "Category", columnType: "DROPDOWN", dataValidationRule: oneOfList(["Safe Haven", "RWA Yield", "Equity", "Crypto"]) },
+  { columnIndex: 1, columnName: "Category", columnType: "DROPDOWN", dataValidationRule: oneOfList(["Cash", "Fixed Income", "Commodity", "Equity", "Crypto"]) },
   { columnIndex: 2, columnName: "Risk", columnType: "DROPDOWN", dataValidationRule: oneOfList(["Low", "Low-Medium", "Medium", "Medium-High", "High"]) },
   { columnIndex: 3, columnName: "Link" },
   { columnIndex: 4, columnName: "Network" },
