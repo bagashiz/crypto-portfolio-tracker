@@ -76,20 +76,39 @@ const fQty = (r: number) =>
 const fPrice = (r: number) =>
   `=IF(E${r}="Hyperliquid & Solana", 1, IF(E${r}="Hyperliquid", HL_PRICE(F${r}), IF(E${r}="Solana", JUP_PRICE(F${r}), "")))`;
 const fValue = (r: number) => `=G${r}*H${r}`;
-// Cost Basis = weighted-average cost per unit (buy amount + buy fees, ÷ buy qty) × the
-// REMAINING qty (buy qty − sell qty) — not a raw dollar netting of buys minus sells. A
-// simple `buyAmount - sellAmount` only happens to work while nothing's been sold; once a
-// SELL exists it strands leftover cost basis on an already-closed (or partially-closed)
-// position, which Unreal. PnL then re-books as a second loss/gain on top of what Real. PnL
-// already captured for the units actually sold — see the matching comment on fReal below,
-// which uses the same per-unit average so the two columns never double-count.
-const fCost = (r: number) => `=LET(
-  buyAmount, SUMIFS(Transactions[Amount], Transactions[Asset], A${r}, Transactions[Side], "BUY"),
-  buyFees,   SUMIFS(Transactions[Fees],   Transactions[Asset], A${r}, Transactions[Side], "BUY"),
-  buyQty,    SUMIFS(Transactions[Qty.],   Transactions[Asset], A${r}, Transactions[Side], "BUY"),
-  sellQty,   SUMIFS(Transactions[Qty.],   Transactions[Asset], A${r}, Transactions[Side], "SELL"),
-  IF(buyQty=0, 0, (buyAmount + buyFees) / buyQty * (buyQty - sellQty))
+// Cost Basis / Real. PnL: MOVING-AVERAGE COST method, via a per-transaction state machine
+// (SCAN) — NOT a single all-history weighted average. A single average over every BUY
+// minus every SELL breaks once a position fully closes and reopens: it blends the closed
+// lot's price into the new lot (overstating Cost Basis) AND retroactively changes the
+// ALREADY-REALIZED PnL from the old sale every time a later, unrelated BUY is added — a
+// closed sale's PnL must never move again after the fact.
+//
+// This tracks (running qty, running avg cost/unit, cumulative realized PnL) across the
+// asset's transactions IN ROW ORDER (assumes the ledger is entered chronologically, top
+// to bottom — an out-of-order row computes the wrong PnL). A BUY updates the running
+// average; a SELL locks in realized PnL against the CURRENT average and leaves the
+// average untouched, so a later BUY can never revise a sale that already happened.
+// Cost Basis = final qty × final avg (naturally $0 once a position is fully closed).
+const fState = (r: number) => `LET(
+  asset, A${r},
+  n, COUNTIFS(Transactions[Asset], asset),
+  IF(n=0, {0,0,0}, LET(
+    side, FILTER(Transactions[Side], Transactions[Asset]=asset),
+    qty,  FILTER(Transactions[Qty.], Transactions[Asset]=asset),
+    amt,  FILTER(Transactions[Amount], Transactions[Asset]=asset),
+    fee,  FILTER(Transactions[Fees], Transactions[Asset]=asset),
+    states, SCAN(HSTACK(0,0,0), SEQUENCE(n), LAMBDA(acc, i, LET(
+      q, INDEX(qty, i, 1), s, INDEX(side, i, 1), a, INDEX(amt, i, 1), f, INDEX(fee, i, 1),
+      pq, INDEX(acc, 1, 1), pa, INDEX(acc, 1, 2), pr, INDEX(acc, 1, 3),
+      IF(s="BUY",
+        HSTACK(pq + q, IF(pq + q = 0, 0, (pq * pa + a + f) / (pq + q)), pr),
+        HSTACK(pq - q, pa, pr + (a - f - pa * q))
+      )
+    ))),
+    INDEX(states, n, 0)
+  ))
 )`;
+const fCost = (r: number) => `=LET(s, ${fState(r)}, INDEX(s, 1, 1) * INDEX(s, 1, 2))`;
 // Val. % — the asset's actual share of total value (= Value ÷ Σ Value).
 const F_VAL = `=IF(SUM(Holdings[Value])=0, 0, ROUND(Holdings[Value] / SUM(Holdings[Value]), 4))`;
 // Plain column arithmetic, so structured refs (position-independent — the % and Value
@@ -106,20 +125,10 @@ const F_TGTVAL = `=Holdings[Tgt. %]*SUM(Holdings[Value])`;
 // Dollar deviation from target (Actual − Target, same convention as Dev. %): +ve = holding
 // more than target (overweight), -ve = holding less (underweight). Equivalent to Dev. % × Σ Value.
 const F_DEVVAL = `=Holdings[Value]-Holdings[Tgt. Value]`;
-// Realized PnL (weighted-average cost, fees included in the per-unit cost — see fCost):
-// sell proceeds net of sell fees, minus the average buy cost (incl. buy fees) of the units
-// sold. Zero until there are SELL rows for the asset. Uses the SAME per-unit average as
-// fCost so the two columns always partition the total buy cost exactly once between
-// "still held" (Cost Basis) and "sold" (this) — never both.
-const fReal = (r: number) => `=LET(
-  sellProceeds, SUMIFS(Transactions[Amount], Transactions[Asset], A${r}, Transactions[Side], "SELL"),
-  sellFees,     SUMIFS(Transactions[Fees],   Transactions[Asset], A${r}, Transactions[Side], "SELL"),
-  sellQty,      SUMIFS(Transactions[Qty.],   Transactions[Asset], A${r}, Transactions[Side], "SELL"),
-  buyAmount,    SUMIFS(Transactions[Amount], Transactions[Asset], A${r}, Transactions[Side], "BUY"),
-  buyFees,      SUMIFS(Transactions[Fees],   Transactions[Asset], A${r}, Transactions[Side], "BUY"),
-  buyQty,       SUMIFS(Transactions[Qty.],   Transactions[Asset], A${r}, Transactions[Side], "BUY"),
-  IF(buyQty=0, 0, sellProceeds - sellFees - (buyAmount + buyFees) / buyQty * sellQty)
-)`;
+// Cumulative realized PnL — the running-realized-PnL component of the SAME moving-average
+// state machine as fCost above, so the two never double-count and a sale's PnL is locked
+// in permanently once it happens.
+const fReal = (r: number) => `=LET(s, ${fState(r)}, INDEX(s, 1, 3))`;
 
 function rowFor(a: Asset, r: number): Primitive[] {
   return [
