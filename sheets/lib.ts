@@ -129,6 +129,44 @@ export function oneOfList(values: string[]): Record<string, unknown> {
   return { condition: { type: "ONE_OF_LIST", values: values.map((v) => ({ userEnteredValue: v })) } };
 }
 
+/**
+ * Moving-average-cost per-transaction state machine for one asset — the shared core of
+ * Holdings' Cost Basis/Real. PnL formulas AND Summary's ledger-wide ("survives delisting")
+ * Realized PnL total. Tracks (running qty, running avg cost/unit, cumulative realized PnL)
+ * across the asset's transactions IN ROW ORDER (assumes the ledger is entered
+ * chronologically, top to bottom — an out-of-order row computes the wrong PnL). A BUY
+ * updates the running average; a SELL locks in realized PnL against the CURRENT average and
+ * leaves the average untouched, so a later BUY can never revise a sale that already
+ * happened. Returns a 1x3 array {qty, avgCost, realizedPnL}.
+ *
+ * `assetExpr` is any formula expression evaluating to the asset name — an A1 ref (Holdings,
+ * one row per asset) or a LAMBDA-bound variable (Summary, mapped over every distinct asset
+ * that ever appears in Transactions, including ones no longer listed in Holdings). Bound
+ * internally to `assetName` rather than reused verbatim so a LAMBDA-bound caller can safely
+ * pass its own variable (e.g. `asset`) without a same-name LET shadowing ambiguity.
+ */
+export function assetPnlState(assetExpr: string): string {
+  return `LET(
+    assetName, ${assetExpr},
+    n, COUNTIFS(Transactions[Asset], assetName),
+    IF(n=0, {0,0,0}, LET(
+      side, FILTER(Transactions[Side], Transactions[Asset]=assetName),
+      qty,  FILTER(Transactions[Qty.], Transactions[Asset]=assetName),
+      amt,  FILTER(Transactions[Amount], Transactions[Asset]=assetName),
+      fee,  FILTER(Transactions[Fees], Transactions[Asset]=assetName),
+      states, SCAN(HSTACK(0,0,0), SEQUENCE(n), LAMBDA(acc, i, LET(
+        q, INDEX(qty, i, 1), s, INDEX(side, i, 1), a, INDEX(amt, i, 1), f, INDEX(fee, i, 1),
+        pq, INDEX(acc, 1, 1), pa, INDEX(acc, 1, 2), pr, INDEX(acc, 1, 3),
+        IF(s="BUY",
+          HSTACK(pq + q, IF(pq + q = 0, 0, (pq * pa + a + f) / (pq + q)), pr),
+          HSTACK(pq - q, pa, pr + (a - f - pa * q))
+        )
+      ))),
+      INDEX(states, n, 0)
+    ))
+  )`;
+}
+
 /** Run `gws` via the local dependency, returning stdout. Throws on non-zero exit. */
 export async function gws(args: string[]): Promise<string> {
   const proc = Bun.spawn(["bunx", "gws", ...args], { stdout: "pipe", stderr: "pipe" });

@@ -2,6 +2,7 @@ import {
   valuesAt,
   oneOfList,
   privacyMaskRule,
+  assetPnlState,
   PRIVACY_FOLLOWER_CELL,
   TABLE_BANDING,
   type BuildContext,
@@ -76,38 +77,14 @@ const fQty = (r: number) =>
 const fPrice = (r: number) =>
   `=IF(E${r}="Hyperliquid & Solana", 1, IF(E${r}="Hyperliquid", HL_PRICE(F${r}), IF(E${r}="Solana", JUP_PRICE(F${r}), "")))`;
 const fValue = (r: number) => `=G${r}*H${r}`;
-// Cost Basis / Real. PnL: MOVING-AVERAGE COST method, via a per-transaction state machine
-// (SCAN) — NOT a single all-history weighted average. A single average over every BUY
-// minus every SELL breaks once a position fully closes and reopens: it blends the closed
-// lot's price into the new lot (overstating Cost Basis) AND retroactively changes the
-// ALREADY-REALIZED PnL from the old sale every time a later, unrelated BUY is added — a
-// closed sale's PnL must never move again after the fact.
-//
-// This tracks (running qty, running avg cost/unit, cumulative realized PnL) across the
-// asset's transactions IN ROW ORDER (assumes the ledger is entered chronologically, top
-// to bottom — an out-of-order row computes the wrong PnL). A BUY updates the running
-// average; a SELL locks in realized PnL against the CURRENT average and leaves the
-// average untouched, so a later BUY can never revise a sale that already happened.
+// Cost Basis / Real. PnL: MOVING-AVERAGE COST method (assetPnlState in lib.ts, shared with
+// Summary's ledger-wide Realized PnL total) — NOT a single all-history weighted average. A
+// single average over every BUY minus every SELL breaks once a position fully closes and
+// reopens: it blends the closed lot's price into the new lot (overstating Cost Basis) AND
+// retroactively changes the ALREADY-REALIZED PnL from the old sale every time a later,
+// unrelated BUY is added — a closed sale's PnL must never move again after the fact.
 // Cost Basis = final qty × final avg (naturally $0 once a position is fully closed).
-const fState = (r: number) => `LET(
-  asset, A${r},
-  n, COUNTIFS(Transactions[Asset], asset),
-  IF(n=0, {0,0,0}, LET(
-    side, FILTER(Transactions[Side], Transactions[Asset]=asset),
-    qty,  FILTER(Transactions[Qty.], Transactions[Asset]=asset),
-    amt,  FILTER(Transactions[Amount], Transactions[Asset]=asset),
-    fee,  FILTER(Transactions[Fees], Transactions[Asset]=asset),
-    states, SCAN(HSTACK(0,0,0), SEQUENCE(n), LAMBDA(acc, i, LET(
-      q, INDEX(qty, i, 1), s, INDEX(side, i, 1), a, INDEX(amt, i, 1), f, INDEX(fee, i, 1),
-      pq, INDEX(acc, 1, 1), pa, INDEX(acc, 1, 2), pr, INDEX(acc, 1, 3),
-      IF(s="BUY",
-        HSTACK(pq + q, IF(pq + q = 0, 0, (pq * pa + a + f) / (pq + q)), pr),
-        HSTACK(pq - q, pa, pr + (a - f - pa * q))
-      )
-    ))),
-    INDEX(states, n, 0)
-  ))
-)`;
+const fState = (r: number) => assetPnlState(`A${r}`);
 const fCost = (r: number) => `=LET(s, ${fState(r)}, INDEX(s, 1, 1) * INDEX(s, 1, 2))`;
 // Val. % — the asset's actual share of total value (= Value ÷ Σ Value).
 const F_VAL = `=IF(SUM(Holdings[Value])=0, 0, ROUND(Holdings[Value] / SUM(Holdings[Value]), 4))`;

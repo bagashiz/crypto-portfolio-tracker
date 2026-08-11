@@ -1,6 +1,7 @@
 import {
   valuesAt,
   privacyMaskRule,
+  assetPnlState,
   type BuildContext,
   type BuildResult,
   type Primitive,
@@ -90,6 +91,19 @@ const RISK_STEP = 2;
 const RISK_SCORE = `=(${RISKS.map((rk, i) => `SUMIF(Holdings[Risk], "${rk}", Holdings[Tgt. %])*${RISK_LEVELS[i]}`).join(" + ")}) / SUM(Holdings[Tgt. %])`;
 const RISK_LABEL = `=CHOOSE(ROUND(E2 / ${RISK_STEP}, 0), ${RISKS.map((rk) => `"${rk}"`).join(", ")})`;
 
+// Realized PnL is sourced from the FULL Transactions ledger — every distinct asset that
+// ever appears there, not SUM(Holdings[Real. PnL]) — because the Holdings-based total
+// silently drops a delisted asset's already-realized gains/losses to 0 the moment its row
+// is removed, even though the ledger (and that locked-in PnL) still exists. MAP applies the
+// shared per-transaction moving-average state machine (assetPnlState, lib.ts — same one
+// Holdings' own Cost Basis/Real. PnL use) to every historical asset and sums each one's
+// realized component.
+const REALIZED_PNL_TOTAL = `=LET(
+  assets, UNIQUE(Transactions[Asset]),
+  perAsset, MAP(assets, LAMBDA(asset, LET(s, ${assetPnlState("asset")}, INDEX(s, 1, 3)))),
+  SUM(perAsset)
+)`;
+
 function grid(): Primitive[][] {
   const cat = CATEGORIES.map((c, i) => catRow(c, CAT_FIRST + i));
   const risk = RISKS.map((rk, i) => riskRow(rk, RISK_FIRST + i));
@@ -102,7 +116,7 @@ function grid(): Primitive[][] {
     ["Total Value", "=SUM(Holdings[Value])", `=B6*${RATE}`], // 6
     ["Total Cost Basis", "=SUM(Holdings[Cost Basis])", `=B7*${RATE}`], // 7
     ["Unrealized PnL", "=SUM(Holdings[Unreal. PnL])", `=B8*${RATE}`], // 8
-    ["Realized PnL", "=SUM(Holdings[Real. PnL])", `=B9*${RATE}`], // 9
+    ["Realized PnL", REALIZED_PNL_TOTAL, `=B9*${RATE}`], // 9
     ["Total PnL", "=B8+B9", `=B10*${RATE}`], // 10
     ["Return %", "=IF(B7=0, 0, B8/B7)"], // 11
     [""], // 12
